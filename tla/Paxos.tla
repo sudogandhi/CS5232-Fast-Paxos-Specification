@@ -10,7 +10,7 @@ CONSTANTS Replicas
 CONSTANTS None, Values
 CONSTANTS Ballots
 
-VARIABLES messages, committed
+VARIABLES messages, decision
 
 PaxosQuorums == {s \in SUBSET Replicas : (Cardinality(Replicas) \div 2) < Cardinality(s)}
 
@@ -41,10 +41,10 @@ ASSUME /\ QuorumAssume /\ BallotAssume
 
 SendMessage(m) == messages' = messages \union {m}
 
-CommitValue(r, v) == committed' = [committed EXCEPT ![r] = v]
+DecideValue(r, v) == decision' = [decision EXCEPT ![r] = v]
 
 PaxosPrepare == /\ \E b \in Ballots, r \in Replicas: SendMessage([type |-> "P1a", ballot |-> b, proposer |-> r])
-           /\ UNCHANGED<<committed>>
+                /\ UNCHANGED<<decision>>
 
 PaxosPromise == FALSE
 
@@ -52,30 +52,30 @@ PaxosAccept == FALSE
 
 PaxosAccepted == FALSE
 
-PaxosCommit == FALSE
+PaxosDecide == FALSE
 
 PaxosInit == /\ messages = {}
-             /\ committed = [r \in Replicas |-> None]
+             /\ decision = [r \in Replicas |-> None]
 
 PaxosNext == \/ PaxosPrepare
              \/ PaxosPromise
              \/ PaxosAccept
              \/ PaxosAccepted
-             \/ PaxosCommit
+             \/ PaxosDecide
 
 PaxosTypeOK == /\ None \notin Values
                /\ messages \subseteq Message
-               /\ committed \in [Replicas -> Values \union {None}]
+               /\ decision \in [Replicas -> Values \union {None}]
 
-CommitConflict == \E r1, r2 \in Replicas : /\ committed[r1] # committed[r2]
-                                           /\ committed[r1] # None
-                                           /\ committed[r2] # None
+DecideConflict == \E r1, r2 \in Replicas : /\ decision[r1] # decision[r2]
+                                           /\ decision[r1] # None
+                                           /\ decision[r2] # None
 
-CommitChange == \E r \in Replicas : /\ committed[r] # committed'[r]
-                                    /\ committed[r] # None
-                                    /\ committed'[r] # None
+DecideChange == \E r \in Replicas : /\ decision[r] # decision'[r]
+                                    /\ decision[r] # None
+                                    /\ decision'[r] # None
 
-PaxosSafetyProperty == [][~CommitChange]_<<messages, committed>> /\ [][~CommitConflict]_<<messages, committed>>
+PaxosSafetyProperty == [][~DecideChange]_<<messages, decision>> /\ [][~DecideConflict]_<<messages, decision>>
 
 PaxosLivenessProperty == TRUE
 
