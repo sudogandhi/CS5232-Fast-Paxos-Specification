@@ -1,0 +1,6 @@
+*.dvi
+*.out
+*.pdf
+*.tex
+
+tla/states/
