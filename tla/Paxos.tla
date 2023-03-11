@@ -42,7 +42,7 @@ P3Message == [type : {"P3"},
 Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage \union P3Message
 
 QuorumAssume == /\ \A q \in PaxosQuorums : q \subseteq Replicas
-                /\ \A q1, q2 \in PaxosQuorums : q1 \intersect q2 # {}
+                /\ \A q, r \in PaxosQuorums : q \intersect r # {}
 BallotAssume == /\ Ballots \subseteq Nat
                 /\ 0 \in Ballots
 ASSUME /\ QuorumAssume /\ BallotAssume
