@@ -130,12 +130,16 @@ DecideConflict == \E a, b \in Replicas : /\ decision[a] # None
 DecideChange == \E a \in Replicas : /\ decision[a] # None
                                     /\ decision[a] # decision'[a]
 
-InvalidAccept == \E m \in P2bMessages : \/ m.acceptedBallot = None /\ m.acceptedValue # None
-                                        \/ m.acceptedBallot # None /\ m.acceptedValue = None
+InvalidAccepted == \E m \in P2bMessages :
+                       \/ m.acceptedBallot = None /\ m.acceptedValue # None
+                       \/ m.acceptedBallot # None /\ m.acceptedValue = None
+                       \/ /\ m.acceptedBallot # None \/ m.acceptedValue # None
+                          /\ \A n \in P2aMessages : /\ m.acceptedBallot # n.ballot
+                                                    /\ m.acceptedValue # n.value
 
 PaxosSafetyProperty == /\ [][~DecideChange]_<<messages, decision>>
                        /\ [][~DecideConflict]_<<messages, decision>>
-                       /\ [][~InvalidAccept]_<<messages, decision>>
+                       /\ [][~InvalidAccepted]_<<messages, decision>>
 
 PaxosLivenessProperty == TRUE
 
