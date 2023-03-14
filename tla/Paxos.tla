@@ -10,10 +10,10 @@ CONSTANTS Replicas
 CONSTANTS None, Values
 CONSTANTS Ballots
 
-\* Variable messages is the set of all messages sent.
-VARIABLES messages
-\* Variable decision is the decided value of the replicas.
-VARIABLES decision
+VARIABLES messages \* The set of all messages sent.
+VARIABLES decision \* The decided value of the replicas.
+
+AnyValue == CHOOSE v \in Values : TRUE
 
 PaxosQuorums == {q \in SUBSET Replicas : (Cardinality(Replicas) \div 2) < Cardinality(q)}
 
@@ -50,7 +50,11 @@ ASSUME /\ QuorumAssume /\ BallotAssume
 Filter(M, f(_)) == {m \in M : f(m)}
 FilterProposer(M, p) == Filter(M, LAMBDA m : m.proposer = p)
 FilterAcceptor(M, a) == Filter(M, LAMBDA m : m.acceptor = a)
+FilterBallot(M, b) == Filter(M, LAMBDA m : m.ballot = b)
 FilterType(M, t) == Filter(M, LAMBDA m : m.type = t)
+FilterQuorum(M, q) == Filter(M, LAMBDA m : m.acceptor \in q)
+FilterAccepted(M) == Filter(M, LAMBDA m : m.acceptedBallot # None /\ m.acceptedValue # None)
+
 P1aMessages == FilterType(messages, "P1a")
 P1bMessages == FilterType(messages, "P1b")
 P2aMessages == FilterType(messages, "P2a")
@@ -62,42 +66,67 @@ AcceptedBallot(a) == LET M == FilterAcceptor(P2bMessages, a)
                      IN IF M = {} THEN None ELSE LargestBallotMessage(M).ballot
 AcceptedValue(a) == LET M == FilterAcceptor(P2bMessages, a)
                     IN IF M = {} THEN None ELSE LargestBallotMessage(M).value
+SelectAcceptedValue(M) == (CHOOSE m \in M : (\A n \in M : n.ballot <= m.ballot)).value
 
 SendMessage(m) == messages' = messages \union {m}
 
 DecideValue(r, v) == decision' = [decision EXCEPT ![r] = v]
 
 \* Phase 1a
-\* A proposer sends a P1a message.
-PaxosPrepare == \E b \in Ballots, p \in Replicas :
-                    /\ \A m \in FilterProposer(P1aMessages, p) : b > m.ballot
-                    /\ SendMessage([type |-> "P1a", ballot |-> b, proposer |-> p])
-                    /\ UNCHANGED<<decision>>
+
+PaxosPrepare ==
+    \* A proposer sends a P1a message.
+    \E b \in Ballots, p \in Replicas :
+        /\ \A m \in FilterProposer(P1aMessages, p) : b > m.ballot
+        /\ SendMessage([type |-> "P1a", ballot |-> b, proposer |-> p])
+        /\ UNCHANGED<<decision>>
 
 \* Phase 1b
-\* If an acceptor receives a P1a message,
-\* with a ballot number larger than any P1a or P2a ballot it has seen before,
-\* then it replies with a P1b message.
-PaxosPromise == \E m \in P1aMessages, a \in Replicas :
-                    /\ HasLargestBallot(FilterAcceptor(P1bMessages, a) \union
-                                        FilterAcceptor(P2bMessages, a), m)
-                    /\ SendMessage([type |-> "P1b",
-                                    ballot |-> m.ballot,
-                                    proposer |-> m.proposer,
-                                    acceptor |-> a,
-                                    acceptedBallot |-> AcceptedBallot(a),
-                                    acceptedValue |-> AcceptedValue(a)])
-                    /\ UNCHANGED<<decision>>
+PaxosPromise ==
+    \* If an acceptor receives a P1a message,
+    \* with a ballot number larger than any P1a or P2a ballot it has seen before,
+    \* then it replies with a P1b message.
+    \E m \in P1aMessages, a \in Replicas :
+        /\ HasLargestBallot(FilterAcceptor(P1bMessages, a) \union
+                            FilterAcceptor(P2bMessages, a), m)
+        /\ SendMessage([type |-> "P1b",
+                        ballot |-> m.ballot,
+                        proposer |-> m.proposer,
+                        acceptor |-> a,
+                        acceptedBallot |-> AcceptedBallot(a),
+                        acceptedValue |-> AcceptedValue(a)])
+        /\ UNCHANGED<<decision>>
 
 \* Phase 2a
-PaxosAccept == FALSE
-                \* Free Case:
-                \* for all 1b replies, acceptedValue = None, acceptedBallot = None
-                \* 2a message can have any value
-
-                \* Forced Case:
-                \* There exists 1b reply where acceptedValue != None AND acceptedBallot != None
-                \* 2a message value must be value of reply with highest acceptedBallot
+\* Forced case:
+\* If a proposer p sends a P1a message with ballot b,
+\* and receives a quorum q of P1b replies,
+\* where there exists a reply with an accepted value and accepted ballot,
+\* send a P2a message with the value of the highest accepted ballot.
+PaxosAccept ==
+    \* Free case:
+    \* If a proposer p sends a P1a message with ballot b,
+    \* and receives a quorum q of P1b replies,
+    \* where all replies have no accepted value or accepted ballot,
+    \* send a P2a message with any value.
+    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums: \* Free case.
+              LET M == FilterBallot(FilterProposer(P1bMessages, p), b)
+              IN /\ \A a \in q : FilterAcceptor(M, a) # {}
+                 /\ \A m \in M : m.acceptedValue = None /\ m.acceptedBallot = None
+                 /\ SendMessage([type |-> "P2a",
+                                 ballot |-> b,
+                                 proposer |-> p,
+                                 value |-> AnyValue])
+       /\ UNCHANGED<<decision>>
+    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums: \* Forced case.
+              LET M == FilterBallot(FilterProposer(P1bMessages, p), b)
+              IN /\ \A a \in q : FilterAcceptor(M, a) # {}
+                 /\ \E m \in M : m.acceptedValue # None /\ m.acceptedBallot # None
+                 /\ SendMessage([type |-> "P2a",
+                                 ballot |-> b,
+                                 proposer |-> p,
+                                 value |-> SelectAcceptedValue(FilterAccepted(M))])
+       /\ UNCHANGED<<decision>>
 
 \* Phase 2b
 PaxosAccepted == FALSE
