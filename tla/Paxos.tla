@@ -104,7 +104,7 @@ PaxosAccept ==
     \* and receives a quorum q of P1b replies,
     \* where all replies have no accepted value or accepted ballot,
     \* send a P2a message with any value.
-    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums: \* Free case.
+    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums:
               LET M == FilterBallot(FilterProposer(P1bMessages, p), b)
               IN /\ \A a \in q : FilterAcceptor(M, a) # {}
                  /\ \A m \in M : m.acceptedValue = None /\ m.acceptedBallot = None
@@ -118,7 +118,7 @@ PaxosAccept ==
     \* and receives a quorum q of P1b replies,
     \* where there exists a reply with an accepted value and accepted ballot,
     \* send a P2a message with the value of the highest accepted ballot.
-    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums: \* Forced case.
+    \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums:
               LET M == FilterBallot(FilterProposer(P1bMessages, p), b)
               IN /\ \A a \in q : FilterAcceptor(M, a) # {}
                  /\ \E m \in M : m.acceptedValue # None /\ m.acceptedBallot # None
