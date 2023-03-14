@@ -98,11 +98,6 @@ PaxosPromise ==
         /\ UNCHANGED<<decision>>
 
 \* Phase 2a
-\* Forced case:
-\* If a proposer p sends a P1a message with ballot b,
-\* and receives a quorum q of P1b replies,
-\* where there exists a reply with an accepted value and accepted ballot,
-\* send a P2a message with the value of the highest accepted ballot.
 PaxosAccept ==
     \* Free case:
     \* If a proposer p sends a P1a message with ballot b,
@@ -118,6 +113,11 @@ PaxosAccept ==
                                  proposer |-> p,
                                  value |-> AnyValue])
        /\ UNCHANGED<<decision>>
+    \* Forced case:
+    \* If a proposer p sends a P1a message with ballot b,
+    \* and receives a quorum q of P1b replies,
+    \* where there exists a reply with an accepted value and accepted ballot,
+    \* send a P2a message with the value of the highest accepted ballot.
     \/ /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums: \* Forced case.
               LET M == FilterBallot(FilterProposer(P1bMessages, p), b)
               IN /\ \A a \in q : FilterAcceptor(M, a) # {}
