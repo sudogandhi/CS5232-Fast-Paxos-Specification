@@ -22,6 +22,9 @@ P1aMessage == [type : {"P1a"},
                proposer : Replicas]                         \* proposer has to be a part of set Replicas
 
 P1bMessage == [type : {"P1b"},
+               ballot : Ballots,
+               proposer : Replicas,                         \* proposer has to be a part of set Replicas
+               acceptor : Replicas,                         \* acceptor has to be a part of set Replicas
                acceptedBallot : Ballots \union {None},      \* either the accepted ballot is a member of set Ballots or is None.
                acceptedValue : Values \union {None}]        \* either the accepted value is a member of set Values or is None.
                                                             \* (acceptedBallot=None) => (acceptedValue=None)
@@ -38,8 +41,6 @@ P2bMessage == [type : {"P2b"},
                
 P3Message == [type : {"P3"},
               ballot : Ballots,                            \* ballot value belongs to set Ballot.
-              proposer : Replicas,                         \* proposer has to be a part of set Replicas
-              acceptor : Replicas,                         \* acceptor has to be a part of set Replicas
               value : Values]                              \* value has to be a part of set Values.
 
 \* Message will be a union of all five types of messages described so far.
@@ -88,6 +89,7 @@ P1aMessages == FilterType(messages, "P1a")
 P1bMessages == FilterType(messages, "P1b")
 P2aMessages == FilterType(messages, "P2a")
 P2bMessages == FilterType(messages, "P2b")
+P3Messages == FilterType(messages, "P3")
 
 
 HasLargestBallot(M, m) == \A n \in M : n.ballot < m.ballot
@@ -107,7 +109,7 @@ SelectAcceptedValue(M) == (CHOOSE m \in M : (\A n \in M : n.ballot <= m.ballot))
 
 SendMessage(m) == messages' = messages \union {m}
 
-DecideValue(r, v) == decision' = [decision EXCEPT ![r] = v]
+DecideValue(a, v) == decision' = [decision EXCEPT ![a] = v]
 
 \* Phase 1a
 PaxosPrepare ==
@@ -165,15 +167,34 @@ PaxosAccept ==
        /\ UNCHANGED<<decision>>
 
 \* Phase 2b
-PaxosAccepted == FALSE
+PaxosAccepted == /\ \E m \in P2aMessages, a \in Replicas: 
+                    LET M == FilterAcceptor(P1bMessages \union  P2bMessages , a)
+                    IN /\ \A n \in M : n.ballot <= m.ballot
+                       /\ SendMessage([
+                        type |-> "P2b",
+                        ballot |-> m.ballot,
+                        proposer |-> m.proposer,
+                        acceptor |-> a,
+                        value |-> m.value
+                        ])
+                 /\ UNCHANGED<<decision>>
                 \* largest received so far < new ballot number
                 \* Update value, update largest ballot number
                 \* send old largest ballot number,
                 \* send old value
 
 \* Phase 3
-PaxosDecide == FALSE
+PaxosDecide == /\ \E q \in PaxosQuorums, b \in Ballots, v \in Values, p \in Replicas:
+                  /\ \A acc \in q : 
+                        \E m \in FilterAcceptor(FilterProposer(P2bMessages, p),acc): /\ m.ballot = b
+                                                                               /\ m.value = v
+                  /\ SendMessage([type |-> "P3",ballot |-> b,value |-> v])
+               /\ UNCHANGED<<decision>>
+
                 \* Send decided value
+
+PaxosDecided == \E msg \in P3Messages, a \in Replicas : DecideValue(a,msg.value)
+                
 
 PaxosInit == /\ messages = {}
              /\ decision = [r \in Replicas |-> None]
@@ -183,6 +204,7 @@ PaxosNext == \/ PaxosPrepare
              \/ PaxosAccept
              \/ PaxosAccepted
              \/ PaxosDecide
+             \/ PaxosDecided
 
 PaxosTypeOK == /\ None \notin Values
                /\ messages \subseteq Message
