@@ -92,7 +92,7 @@ P2bMessages == FilterType(messages, "P2b")
 P3Messages == FilterType(messages, "P3")
 
 
-HasLargestBallot(M, m) == \A n \in M : n.ballot < m.ballot
+HasLargestBallot(M, m) == \A n \in M : n.ballot <= m.ballot
 
 LargestBallotMessage(M) == CHOOSE m \in M : HasLargestBallot(M, m)
 
@@ -218,11 +218,11 @@ DecideChange == \E a \in Replicas : /\ decision[a] # None
                                     /\ decision[a] # decision'[a]
 
 InvalidAccepted == \E m \in P2bMessages :
-                       \/ m.acceptedBallot = None /\ m.acceptedValue # None
-                       \/ m.acceptedBallot # None /\ m.acceptedValue = None
-                       \/ /\ m.acceptedBallot # None \/ m.acceptedValue # None
-                          /\ \A n \in P2aMessages : /\ m.acceptedBallot # n.ballot
-                                                    /\ m.acceptedValue # n.value
+                       \/ m.ballot = None /\ m.value # None
+                       \/ m.ballot # None /\ m.value = None
+                       \/ /\ m.ballot # None \/ m.value # None
+                          /\ \A n \in P2aMessages : /\ m.ballot # n.ballot
+                                                    /\ m.value # n.value
 
 PaxosSafetyProperty == /\ [][~DecideChange]_<<messages, decision>>
                        /\ [][~DecideConflict]_<<messages, decision>>
