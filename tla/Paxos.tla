@@ -10,8 +10,8 @@ CONSTANTS Replicas
 CONSTANTS None, Values
 CONSTANTS Ballots
 
-VARIABLES decision \* The decided value of the replicas.
-VARIABLES messages \* The set of all messages sent.
+VARIABLES messages \* Set of all messages sent.
+VARIABLES decision \* Decided value of the replicas.
 
 AnyValue == CHOOSE v \in Values : TRUE
 
@@ -25,9 +25,9 @@ P1bMessage == [type : {"P1b"},
                ballot : Ballots,                       \* Ballot is in set Ballot.
                proposer : Replicas,                    \* Proposer is in set Replicas.
                acceptor : Replicas,                    \* Acceptor is in set Replicas.
-               acceptedBallot : Ballots \union {None}, \* The accepted ballot is a member of set Ballots or is None.
-               acceptedValue : Values \union {None}]   \* The accepted value is a member of set Values or is None.
-                                                       \* (acceptedBallot = None) => (acceptedValue = None)
+               maxBallot : Ballots \union {None},      \* Max ballot is a member of set Ballots or is None.
+               maxValue : Values \union {None}]        \* Max value is a member of set Values or is None.
+                                                       \* (Max Ballot = None) <=> (Max Value = None)
 
 P2aMessage == [type : {"P2a"},
                ballot : Ballots,                       \* Ballot value is in set Ballot.
@@ -76,37 +76,32 @@ FilterAcceptor(M, a) == Filter(M, LAMBDA m : m.acceptor = a)
 \* Filter all the messages in M with ballot number as b.
 FilterBallot(M, b) == Filter(M, LAMBDA m : m.ballot = b)
 
-\* Filter all the messages in M for which the acceptor is present in the quorum q.
-FilterQuorum(M, q) == Filter(M, LAMBDA m : m.acceptor \in q)
+\* Filter all the messages in M for which the maxBallot and maxValue is not None.
+FilterMax(M) == Filter(M, LAMBDA m : m.maxBallot # None /\ m.maxValue # None)
 
-\* Filter all the messages in M for which the acceptedBallot and acceptedValue is not None.
-FilterAccepted(M) == Filter(M, LAMBDA m : m.acceptedBallot # None /\ m.acceptedValue # None)
+p1aMessages == Filter(messages, LAMBDA m : m.type = "P1a") \* Set of all P1a messages sent.
+p1bMessages == Filter(messages, LAMBDA m : m.type = "P1b") \* Set of all P1b messages sent.
+p2aMessages == Filter(messages, LAMBDA m : m.type = "P2a") \* Set of all P2a messages sent.
+p2bMessages == Filter(messages, LAMBDA m : m.type = "P2b") \* Set of all P2b messages sent.
+p3Messages == Filter(messages, LAMBDA m : m.type = "P3") \* Set of all P3 messages sent.
 
-p1aMessages == Filter(M, LAMBDA m : m.type = "P1a") \* All the P1a messages sent.
-p1bMessages == Filter(M, LAMBDA m : m.type = "P1b") \* All the P1b messages sent.
-p2aMessages == Filter(M, LAMBDA m : m.type = "P2a") \* All the P2a messages sent.
-p2bMessages == Filter(M, LAMBDA m : m.type = "P2b") \* All the P2b messages sent.
-p3Messages == Filter(M, LAMBDA m : m.type = "P3") \* All the P3 messages sent.
-
-LargestBallotMessage(M) == CHOOSE m \in M : \A n \in M : n = m \/ n.ballot < m.ballot
+MaxMessage(M) == CHOOSE m \in M : \A n \in M : n = m \/ n.ballot < m.ballot
 
 \* Filter all the messages which acceptor as a and storing that in M.
 \* Get the ballot for the message which has the largest ballot number in M.
 \* If M is empty then return None.
-AcceptedBallot(a) == LET M == FilterAcceptor(p2bMessages, a)
-                     IN IF M = {}
-                        THEN None
-                        ELSE LargestBallotMessage(M).ballot
+MaxBallot(a) == LET M == FilterAcceptor(p2bMessages, a)
+                IN IF M = {} THEN None ELSE MaxMessage(M).ballot
 
 \* Filter all the messages which acceptor as a and storing that in M.
 \* Get the value for the message which has the largest ballot number in M.
 \* If M is empty then return None.
-AcceptedValue(a) == LET M == FilterAcceptor(p2bMessages, a)
-                    IN IF M = {}
-                       THEN None
-                       ELSE LargestBallotMessage(M).value
+MaxValue(a) == LET M == FilterAcceptor(p2bMessages, a)
+               IN IF M = {} THEN None ELSE MaxMessage(M).value
 
-SelectAcceptedValue(M) == (CHOOSE m \in M : (\A n \in M : n.ballot <= m.ballot)).acceptedValue
+SelectMaxMessage(M) == CHOOSE m \in M : \A n \in M : n = m \/ n.ballot <= m.ballot
+
+SelectMaxValue(M) == SelectMaxMessage(FilterMax(M)).maxValue
 
 SendMessage(m) == messages' = messages \union {m}
 
@@ -134,8 +129,8 @@ PaxosPromise ==
                         ballot |-> m.ballot,
                         proposer |-> m.proposer,
                         acceptor |-> a,
-                        acceptedBallot |-> AcceptedBallot(a),
-                        acceptedValue |-> AcceptedValue(a)])
+                        maxBallot |-> MaxBallot(a),
+                        maxValue |-> MaxValue(a)])
 
 \* Phase 2a
 PaxosAccept ==
@@ -146,9 +141,9 @@ PaxosAccept ==
     \* send a P2a message with any value.
     \/ /\ UNCHANGED<<decision>>
        /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums :
-              LET M == FilterBallot(FilterProposer(p1bMessages, p), b)                  \* filtering all the messages sent by proposer p with ballot b
-              IN /\ \A a \in q : FilterAcceptor(M, a) # {}                              \* checking for a quorum of acceptors who sent P1b replies.
-                 /\ \A m \in M : m.acceptedValue = None /\ m.acceptedBallot = None      \* checking for all the messages in M, there should be no accepted value.
+              LET M == FilterBallot(FilterProposer(p1bMessages, p), b)        \* filtering all the messages sent by proposer p with ballot b
+              IN /\ \A a \in q : FilterAcceptor(M, a) # {}                    \* checking for a quorum of acceptors who sent P1b replies.
+                 /\ \A m \in M : m.maxValue = None /\ m.maxBallot = None      \* checking for all the messages in M, there should be no accepted value.
                  /\ SendMessage([type |-> "P2a",
                                  ballot |-> b,
                                  proposer |-> p,
@@ -160,13 +155,13 @@ PaxosAccept ==
     \* send a P2a message with the value of the highest accepted ballot.
     \/ /\ UNCHANGED<<decision>>
        /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums :
-              LET M == FilterBallot(FilterProposer(p1bMessages, p), b)                  \* filtering all the messages sent by proposer p with ballot b
-              IN /\ \A a \in q : FilterAcceptor(M, a) # {}                              \* checking for a quorum of acceptors who sent P1b replies.
-                 /\ \E m \in M : m.acceptedValue # None /\ m.acceptedBallot # None      \* checking for all the messages in M, there should not be any message with no accepted value.
+              LET M == FilterBallot(FilterProposer(p1bMessages, p), b)        \* filtering all the messages sent by proposer p with ballot b
+              IN /\ \A a \in q : FilterAcceptor(M, a) # {}                    \* checking for a quorum of acceptors who sent P1b replies.
+                 /\ \E m \in M : m.maxValue # None /\ m.maxBallot # None      \* checking for all the messages in M, there should not be any message with no accepted value.
                  /\ SendMessage([type |-> "P2a",
                                  ballot |-> b,
                                  proposer |-> p,
-                                 value |-> SelectAcceptedValue(FilterAccepted(M))])
+                                 value |-> SelectMaxValue(M)])
 
 \* Phase 2b
 PaxosAccepted ==
@@ -190,19 +185,19 @@ PaxosDecide ==
     \* it sends a P3 message with that ballot and value.
     /\ UNCHANGED<<decision>>
     /\ \E p \in Replicas, b \in Ballots, v \in Values, q \in PaxosQuorums :
-        /\ \A a \in q :
-            \E m \in FilterAcceptor(FilterProposer(p2bMessages, p), a) : /\ m.ballot = b
-                                                                        /\ m.value = v
-        /\ SendMessage([type |-> "P3",
-                        ballot |-> b,
-                        value |-> v])
+           /\ \A a \in q : LET M == FilterAcceptor(FilterProposer(p2bMessages, p), a)
+                           IN \E m \in M : m.ballot = b /\ m.value = v
+           /\ SendMessage([type |-> "P3",
+                           ballot |-> b,
+                           value |-> v])
 
-PaxosDecided == /\ \E msg \in p3Messages, a \in Replicas : DecideValue(a,msg.value)
-                /\ UNCHANGED<<messages>>
+PaxosDecided ==
+    /\ UNCHANGED<<messages>>
+    /\ \E msg \in p3Messages, a \in Replicas : DecideValue(a,msg.value)
 
-PaxosEnd == /\ UNCHANGED<messages, decision>>
-            /\ \A a, b \in Replicas : /\ decision[a] = decision[b]
-                                      /\ decision[a] # None
+PaxosEnd ==
+    /\ UNCHANGED<<messages, decision>>
+    /\ \A a, b \in Replicas : decision[a] = decision[b] /\ decision[a] # None
 
 PaxosInit == /\ messages = {}
              /\ decision = [r \in Replicas |-> None]
@@ -221,23 +216,26 @@ PaxosTypeOK == /\ None \notin Values
                /\ messages \subseteq Message
                /\ decision \in [Replicas -> Values \union {None}]
 
-DecideConflict == \E a, b \in Replicas : /\ decision[a] # None
-                                         /\ decision[b] # None
-                                         /\ decision[a] # decision[b]
+DecideConflict ==
+    \E a, b \in Replicas : /\ decision[a] # None /\ decision[b] # None
+                           /\ decision[a] # decision[b]
 
-DecideChange == \E a \in Replicas : /\ decision[a] # None
-                                    /\ decision[a] # decision'[a]
+DecideChange ==
+    \E a \in Replicas : /\ decision[a] # None
+                        /\ decision[a] # decision'[a]
 
-InvalidAccepted == \E m \in p2bMessages :
-                       \/ m.ballot = None /\ m.value # None
-                       \/ m.ballot # None /\ m.value = None
-                       \/ /\ m.ballot # None \/ m.value # None
-                          /\ \A n \in p2aMessages : /\ m.ballot # n.ballot
-                                                    /\ m.value # n.value
+InvalidMax ==
+    \E m \in p1bMessages : \/ m.maxValue = None /\ m.maxBallot # None
+                           \/ m.maxValue # None /\ m.maxBallot = None
+
+InvalidDecide ==
+    \E a \in Replicas : /\ decision[a] # None
+                        /\ decision[a] # MaxMessage(p2aMessages).value
 
 PaxosSafetyProperty == /\ [][~DecideChange]_<<messages, decision>>
                        /\ [][~DecideConflict]_<<messages, decision>>
-                       /\ [][~InvalidAccepted]_<<messages, decision>>
+                       /\ [][~InvalidMax]_<<messages, decision>>
+                       /\ [][~InvalidDecide]_<<messages, decision>>
 
 PaxosLivenessProperty == TRUE
 
