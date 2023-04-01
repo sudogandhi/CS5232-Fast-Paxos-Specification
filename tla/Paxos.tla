@@ -39,7 +39,7 @@ P2bMessage == [type : {"P2b"},
                proposer : Replicas,                    \* Proposer is in set Replicas.
                acceptor : Replicas,                    \* Acceptor is in set Replicas.
                value : Values]                         \* Value is in set Values.
-               
+
 P3Message == [type : {"P3"},
               ballot : Ballots,                        \* Ballot value is in set Ballot.
               value : Values]                          \* Value is in set Values.
