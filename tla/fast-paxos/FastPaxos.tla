@@ -91,16 +91,16 @@ VARIABLE goodSet
 
 \* grouping all the variables together.
 \* group of variables related to acceptor.
-AcceptorVariables == <rounds,valueRounds,values>
+AcceptorVariables == <<rounds,valueRounds,values>>
 
 \* group of variables related to coordinator.
-CoordinatorVariables == <coordinatorRound,coordinatorValue>
+CoordinatorVariables == <<coordinatorRound,coordinatorValue>>
 
 \* group of all other variables
-OtherVariables == <proposedValue,learnedValue,goodSet>
+OtherVariables == <<proposedValue,learnedValue,goodSet>>
 
 \* group containing all variables.
-AllVarialbes == <AcceptorVariables,CoordinatorVariables,OtherVariables,messages>
+AllVarialbes == <<AcceptorVariables,CoordinatorVariables,OtherVariables,messages>>
 
 \* Invariant for all the variables declared.
 FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
@@ -136,10 +136,15 @@ FastPaxosPrepare(i) == /\ coordinatorRound < i          \* coordinator's round n
                        /\ coordinatorRound' = i
                        /\ coordinatorValue = NoneValue
                        /\ SendMessage([type |-> "P1a",round |-> i])
-                       /\ UNCHANGED <AcceptorVariables,OtherVariables>
+                       /\ UNCHANGED <<AcceptorVariables,OtherVariables>>
 
 \* returns the set of all the messages for a particular phase and round and from acceptors of a particular quorum
 FilterMessagesForQuorumRoundAndPhase(quorum,round,phase) == {m \in messages : (m.type = phase) /\ (m.round = round) /\ (m.acceptor \in quorum)}
 
-
+\* msgs are p1b messages sent in the round by all the acceptors of quorum.
+IsValueInQuorum(quorum,round,msgs,val) == LET AcceptorRound(a) == (CHOOSE msg \in msgs : msg.acceptor = a).round        \*extract the round number in which acceptor sent the msg.
+                                              AcceptorValue(a) == (CHOOSE msg \in msgs : msg.acceptor = a).value        \*extract the value for which acceptor sent the msg.
+                                              HighestRound == MaxValue({AcceptorRound(acceptor):acceptor \in quorum})         \*extract hightest round number in which the acceptors in quorum send p1b msg.
+                                              HighestRoundValue == {AcceptorValue(acceptor) : acceptor \in {qAcceptor \in quorum: AcceptorRound(qAcceptor) = HighestRound}}
+                                              
 ===============================================================
