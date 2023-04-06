@@ -8,19 +8,13 @@ EXTENDS TLC, Naturals, FiniteSets, Integers
 
 CONSTANTS Replicas
 CONSTANTS None, Values
-CONSTANTS Ballots
+CONSTANTS Ballots, Quorums, FaultTolerance
 
 VARIABLES messages \* Set of all messages sent.
 VARIABLES decision \* Decided value of the replicas.
-VARIABLES fail  \* Replica status flag. Used to model a replica crashing.
+VARIABLES fault    \* Replica benign fault status.
 
 AnyValue == CHOOSE v \in Values : TRUE
-
-PaxosQuorumSize == Cardinality(Replicas) \div 2 + 1
-
-PaxosQuorums == {q \in SUBSET Replicas : Cardinality(q) = PaxosQuorumSize}
-
-PaxosMaxFail == Cardinality(Replicas) - PaxosQuorumSize
 
 P1aMessage == [type : {"P1a"},
                ballot : Ballots,                       \* Ballot is in set Ballot.
@@ -53,13 +47,13 @@ P3Message == [type : {"P3"},
 Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage \union P3Message
 
 (*
-    For every quorum we compute from PaxosQuorums, we assume that
+    For every quorum we compute from Quorums, we assume that
         1) it is a subset of set Replicas and
         2) intersection of two quorums should not be as empty set,
         3) therefore there must be at least one common element between any two quorums.
 *)
-QuorumAssume == /\ \A q \in PaxosQuorums : q \subseteq Replicas
-                /\ \A q, r \in PaxosQuorums : q \intersect r # {}
+QuorumAssume == /\ \A q \in Quorums : q \subseteq Replicas
+                /\ \A q, r \in Quorums : q \intersect r # {}
 
 (*
     We assume that the set Ballots is a subset of natural numbers,
@@ -115,10 +109,10 @@ DecideValue(a, v) == decision' = [decision EXCEPT ![a] = v]
 \* Phase 1a
 PaxosPrepare ==
     \* A proposer, chooses a ballot number greater than any used so far, and sends a P1a message.
-    /\ UNCHANGED<<decision, fail>>
+    /\ UNCHANGED<<decision, fault>>
     /\ \E b \in Ballots, p \in Replicas :
         /\ \A m \in FilterProposer(p1aMessages, p) : m.ballot < b
-        /\ ~fail[p]
+        /\ ~fault[p]
         /\ SendMessage([type |-> "P1a",
                         ballot |-> b,
                         proposer |-> p])
@@ -128,10 +122,10 @@ PaxosPromise ==
     \* If an acceptor receives a P1a message,
     \* with a ballot number larger than any P1a or P2a ballot it has seen before, it replies with a P1b message.
     \* If it has already accepted a value from a smaller ballot previously, send the value and ballot to the proposer.
-    /\ UNCHANGED<<decision, fail>>
+    /\ UNCHANGED<<decision, fault>>
     /\ \E m \in p1aMessages, a \in Replicas :
         /\ \A n \in FilterAcceptor(p1bMessages \union p2bMessages, a) : n.ballot < m.ballot
-        /\ ~fail[a]
+        /\ ~fault[a]
         /\ SendMessage([type |-> "P1b",
                         ballot |-> m.ballot,
                         proposer |-> m.proposer,
@@ -146,12 +140,12 @@ PaxosAccept ==
     \* and receives a quorum q of P1b replies,
     \* where all replies have no accepted value or accepted ballot,
     \* send a P2a message with any value.
-    \/ /\ UNCHANGED<<decision, fail>>
-       /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums :
+    \/ /\ UNCHANGED<<decision, fault>>
+       /\ \E p \in Replicas, b \in Ballots, q \in Quorums :
               LET M == FilterBallot(FilterProposer(p1bMessages, p), b)        \* filtering all the messages sent by proposer p with ballot b
               IN /\ \A a \in q : FilterAcceptor(M, a) # {}                    \* checking for a quorum of acceptors who sent P1b replies.
                  /\ \A m \in M : m.maxValue = None /\ m.maxBallot = None      \* checking for all the messages in M, there should be no accepted value.
-                 /\ ~fail[p]
+                 /\ ~fault[p]
                  /\ SendMessage([type |-> "P2a",
                                  ballot |-> b,
                                  proposer |-> p,
@@ -161,12 +155,12 @@ PaxosAccept ==
     \* and receives a quorum q of P1b replies,
     \* where there exists a reply with an accepted value and accepted ballot,
     \* send a P2a message with the value of the highest accepted ballot.
-    \/ /\ UNCHANGED<<decision, fail>>
-       /\ \E p \in Replicas, b \in Ballots, q \in PaxosQuorums :
+    \/ /\ UNCHANGED<<decision, fault>>
+       /\ \E p \in Replicas, b \in Ballots, q \in Quorums :
               LET M == FilterBallot(FilterProposer(p1bMessages, p), b)        \* filtering all the messages sent by proposer p with ballot b
               IN /\ \A a \in q : FilterAcceptor(M, a) # {}                    \* checking for a quorum of acceptors who sent P1b replies.
                  /\ \E m \in M : m.maxValue # None /\ m.maxBallot # None      \* checking for all the messages in M, there should not be any message with no accepted value.
-                 /\ ~fail[p]
+                 /\ ~fault[p]
                  /\ SendMessage([type |-> "P2a",
                                  ballot |-> b,
                                  proposer |-> p,
@@ -178,11 +172,11 @@ PaxosAccepted ==
     \* with a ballot number greater or equal to any P1a or P2a messages it has received so far,
     \* it accepts the new value and ballot number,
     \* and sends a P2b message.
-    /\ UNCHANGED<<decision, fail>>
+    /\ UNCHANGED<<decision, fault>>
     /\ \E m \in p2aMessages, a \in Replicas :
         LET M == FilterAcceptor(p1bMessages \union p2bMessages , a)
         IN /\ \A n \in M : n.ballot <= m.ballot
-           /\ ~fail[a]
+           /\ ~fault[a]
            /\ SendMessage([type |-> "P2b",
                            ballot |-> m.ballot,
                            proposer |-> m.proposer,
@@ -193,36 +187,34 @@ PaxosAccepted ==
 PaxosDecide ==
     \* If a proposer receives a quorum of P2b messages for a ballot,
     \* it sends a P3 message with that ballot and value.
-    /\ UNCHANGED<<decision, fail>>
-    /\ \E p \in Replicas, b \in Ballots, v \in Values, q \in PaxosQuorums :
+    /\ UNCHANGED<<decision, fault>>
+    /\ \E p \in Replicas, b \in Ballots, v \in Values, q \in Quorums :
            /\ \A a \in q : LET M == FilterAcceptor(FilterProposer(p2bMessages, p), a)
                            IN \E m \in M : m.ballot = b /\ m.value = v
-           /\ ~fail[p]
+           /\ ~fault[p]
            /\ SendMessage([type |-> "P3",
                            ballot |-> b,
                            value |-> v])
 
 \* Acceptor decides on a value.
 PaxosDecided ==
-    /\ UNCHANGED<<messages, fail>>
+    /\ UNCHANGED<<messages, fault>>
     /\ \E msg \in p3Messages, a \in Replicas :
-           /\ ~fail[a]
+           /\ ~fault[a]
            /\ DecideValue(a,msg.value)
-
-\* All acceptors decided on the same value.
-PaxosEnd ==
-    /\ UNCHANGED<<messages, decision, fail>>
-    /\ \A a, b \in Replicas : decision[a] = decision[b] /\ decision[a] # None
 
 \* Simulate a benign failure, up to the maximum tolerable number of failures.
 PaxosFail ==
     /\ UNCHANGED<<messages, decision>>
-    /\ Cardinality({r \in Replicas : fail[r]}) < PaxosMaxFail
-    /\ \E r \in Replicas : fail' = [fail EXCEPT ![r] = FALSE]
+    /\ Cardinality({r \in Replicas : fault[r]}) < FaultTolerance
+    /\ \E r \in Replicas : /\ fault' = [fault EXCEPT ![r] = TRUE]
+                           \* Simulate failure before sending any P2b messages,
+                           \* otherwise the consensus can still be reached.
+                           /\ Cardinality(FilterAcceptor(p2bMessages, r)) = 0
 
 PaxosInit == /\ messages = {}
              /\ decision = [r \in Replicas |-> None]
-             /\ fail = [r \in Replicas |-> FALSE]
+             /\ fault = [r \in Replicas |-> FALSE]
 
 PaxosNext == \/ PaxosPrepare
              \/ PaxosPromise
@@ -230,17 +222,16 @@ PaxosNext == \/ PaxosPrepare
              \/ PaxosAccepted
              \/ PaxosDecide
              \/ PaxosDecided
-             \* \/ PaxosEnd
              \/ PaxosFail
 
 PaxosSpec == /\ PaxosInit
-             /\ [][PaxosNext]_<<decision, messages, fail>>
-             /\ WF_<<decision, messages, fail>>(PaxosDecide)
+             /\ [][PaxosNext]_<<decision, messages, fault>>
+             /\ SF_<<decision, messages, fault>>(PaxosDecided)
 
 PaxosTypeOK == /\ None \notin Values
                /\ messages \subseteq Message
                /\ decision \in [Replicas -> Values \union {None}]
-               /\ fail \in [Replicas -> {TRUE, FALSE}]
+               /\ fault \in [Replicas -> {TRUE, FALSE}]
 
 DecideConflict ==
     \E a, b \in Replicas : /\ decision[a] # None /\ decision[b] # None
@@ -262,8 +253,6 @@ PaxosSafetyProperty == /\ [][~DecideChange]_<<messages, decision>>
                        /\ [][~DecideConflict]_<<messages, decision>>
                        /\ [][~InvalidMax]_<<messages, decision>>
                        /\ [][~InvalidDecide]_<<messages, decision>>
-
-PaxosLivenessProperty == TRUE
 
 PaxosSymmetry == Permutations(Values) \union Permutations(Replicas)
 

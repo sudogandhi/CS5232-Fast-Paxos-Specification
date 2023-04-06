@@ -1,63 +1,19 @@
 --------------------------- MODULE FastPaxos -----------------------------
 EXTENDS TLC, Naturals, FiniteSets, Integers
 
+INSTANCE Paxos
 
 MaxValue(A) == CHOOSE a \in A: \A b \in A: b <= a
 
-CONSTANT Values                 \* Set of all the values.
-CONSTANT Replicas               \* Set of all replicas.
-CONSTANT FastRoundNumber        \* Set of Fast Rounds.
 (*
 As there is only one coordinator thereofore,
 Explicitly specify the name of the coordinator.
 We are here also considering that the only coordinator is also the leader.
 *)
-CONSTANT Coordinator            
-
-RoundNumber == Nat \ {0}        \* set of positive round numbers
-
-ASSUME IsFiniteSet(Replicas)    \* Set of Replicas should be a Finite set.
-ASSUME Coordinator \in Replicas     \* Assumption related to coordinator that it should be a member of Replicas set.
-ASSUME FastRoundNumber \subseteq RoundNumber
-
-(* It is a set of all subsets of replicas which contains count of members which is more than half of the size of set Replicas*)
-FastPaxosQuorums == {q \in SUBSET Replicas : (Cardinality(Replicas) \div 2) < Cardinality(q)}
-QuorumAssume == /\ \A q \in FastPaxosQuorums : q \subseteq Replicas
-                /\ \A q, r \in FastPaxosQuorums : q \intersect r # {}
-ASSUME QuorumAssume
-
-
-(* All round numbers which are not fast rounds will be classic rounds*)
-ClassicRoundRoundNumber == RoundNumber \ FastRoundNumber
-
-\* Definition of any value and none values.
-AnyValue == CHOOSE val : val \notin Values
-NoneValue == CHOOSE nval : nval \notin (Values \union {AnyValue})
-
-P1aMessage == [type : {"P1a"},
-               round : RoundNumber]                       \* round is in set round.
-
-P1bMessage == [type : {"P1b"},
-               round : RoundNumber,                       \* round is in set round.
-               valueRound: RoundNumber \union {0},        \* round in which value is chosen
-               acceptor : Replicas,                    \* Acceptor is in set Replicas.
-               value: Values \union {AnyValue}]
-
-P2aMessage == [type : {"P2a"},
-               round : RoundNumber,                       \* round value is in set round.
-               value : Values]                         \* Value is in set Values.
-
-P2bMessage == [type : {"P2b"},
-               round : RoundNumber,                       \* round is in set round.
-               acceptor : Replicas,                    \* Acceptor is in set Replicas.
-               value : Values]                         \* Value is in set Values.
-
-P3Message == [type : {"P3"},
-              round : RoundNumber,                        \* round value is in set round.
-              value : Values]                          \* Value is in set Values.
-
-\* Message is the union of P1aMessage, P1bMessage, P2aMessage, P2bMessage and P3Message.
-Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage \union P3Message
+CONSTANT Replicas, Coordinator
+CONSTANT None, Any, Values
+CONSTANT Ballots, Quorums, FaultTolerance
+CONSTANT FastRoundNumber        \* Set of Fast Rounds.
 
 \* round of participation for an acceptor. 0 means has not participated in any round
 VARIABLE rounds
@@ -89,6 +45,41 @@ VARIABLE proposedValue
 VARIABLE learnedValue
 VARIABLE goodSet
 
+RoundNumber == Nat \ {0}        \* set of positive round numbers
+
+ASSUME IsFiniteSet(Replicas) \* Set of Replicas should be a Finite set.
+ASSUME Coordinator \in Replicas \* Assumption related to coordinator that it should be a member of Replicas set.
+ASSUME FastRoundNumber \subseteq RoundNumber
+
+
+(* All round numbers which are not fast rounds will be classic rounds*)
+ClassicRoundRoundNumber == RoundNumber \ FastRoundNumber
+
+P1aMessage == [type : {"P1a"},
+               round : RoundNumber]                       \* round is in set round.
+
+P1bMessage == [type : {"P1b"},
+               round : RoundNumber,                       \* round is in set round.
+               valueRound: RoundNumber \union {0},        \* round in which value is chosen
+               acceptor : Replicas,                    \* Acceptor is in set Replicas.
+               value: Values \union {Any}]
+
+P2aMessage == [type : {"P2a"},
+               round : RoundNumber,                       \* round value is in set round.
+               value : Values]                         \* Value is in set Values.
+
+P2bMessage == [type : {"P2b"},
+               round : RoundNumber,                       \* round is in set round.
+               acceptor : Replicas,                    \* Acceptor is in set Replicas.
+               value : Values]                         \* Value is in set Values.
+
+P3Message == [type : {"P3"},
+              round : RoundNumber,                        \* round value is in set round.
+              value : Values]                          \* Value is in set Values.
+
+\* Message is the union of P1aMessage, P1bMessage, P2aMessage, P2bMessage and P3Message.
+Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage \union P3Message
+
 \* grouping all the variables together.
 \* group of variables related to acceptor.
 AcceptorVariables == <<rounds,valueRounds,values>>
@@ -105,9 +96,9 @@ AllVarialbes == <<AcceptorVariables,CoordinatorVariables,OtherVariables,messages
 \* Invariant for all the variables declared.
 FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
                    /\ valueRounds \in [Replicas -> Nat]
-                   /\ values \in [Replicas -> Val \union {AnyValue}]
+                   /\ values \in [Replicas -> Val \union {Any}]
                    /\ coordinatorRound \in  Nat
-                   /\ coordinatorValue \in Values \union {AnyValue, NoneValue}
+                   /\ coordinatorValue \in Values \union {Any, None}
                    /\ messages \in SUBSET Message
                    /\ proposedValue \in SUBSET  Values
                    /\ learnedValue \in SUBSET Values
@@ -115,10 +106,10 @@ FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
 
 FastPaxosInit == /\ rounds = [Replicas |-> 0]
                  /\ valueRounds = [Replicas |-> 0]
-                 /\ values = [Replicas |-> AnyValue]
+                 /\ values = [Replicas |-> Any]
                  /\ rounds = [Replicas |-> 0]
                  /\ coordinatorRound = 0
-                 /\ coordinatorValue = NoneValue
+                 /\ coordinatorValue = None
                  /\ messages = {}
                  /\ proposedValue = {}
                  /\ learnedValue = {}
@@ -129,12 +120,12 @@ SendMessage(m) == messages' = messages \union {m}
 \* Implementing Phase 1a for round i
 FastPaxosPrepare(i) == /\ coordinatorRound < i          \* coordinator's round number is less than the current round number i.
                        /\ \/ coordinatorRound = 0       \* if coordinator has not participated in any of the rounds yet.
-                          \/ \E msg \in messages : /\ coordinatorRound < msg.round      
+                          \/ \E msg \in messages : /\ coordinatorRound < msg.round
                                                    /\ msg.round < i
                           \/ /\ coordinatorRound \in FastRoundNumber        \* coordinator previouslt participated in a fast round.
                              /\ i \in ClassicRoundRoundNumber               \* but the current round is a classic round.
                        /\ coordinatorRound' = i
-                       /\ coordinatorValue = NoneValue
+                       /\ coordinatorValue = None
                        /\ SendMessage([type |-> "P1a",round |-> i])
                        /\ UNCHANGED <<AcceptorVariables,OtherVariables>>
 
@@ -146,5 +137,7 @@ IsValueInQuorum(quorum,round,msgs,val) == LET AcceptorRound(a) == (CHOOSE msg \i
                                               AcceptorValue(a) == (CHOOSE msg \in msgs : msg.acceptor = a).value        \*extract the value for which acceptor sent the msg.
                                               HighestRound == MaxValue({AcceptorRound(acceptor):acceptor \in quorum})         \*extract hightest round number in which the acceptors in quorum send p1b msg.
                                               HighestRoundValue == {AcceptorValue(acceptor) : acceptor \in {qAcceptor \in quorum: AcceptorRound(qAcceptor) = HighestRound}}
-                                              
+
+FastPaxosSpec == /\ FastPaxosInit
+
 ===============================================================
