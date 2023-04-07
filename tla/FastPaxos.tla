@@ -166,21 +166,21 @@ FastPaxosAccept(value) == /\ coordinatorRound # 0
                                 /\ IsValueInQuorum(quorum, coordinatorRound, FilterMessagesForQuorumRoundAndPhase(quorum,coordinatorRound,"P1b"),value)
                           /\ coordinatorValue' = value
                           /\ SendMessage([type |-> "P2a",round |-> coordinatorRound, value |-> value])
-                          /\ UNCHANGED <coordinatorRound, AcceptorVariables,OtherVariables>
+                          /\ UNCHANGED <<coordinatorRound, AcceptorVariables,OtherVariables>>
 
 \* P2b => P1b
 P1bImpliedByP2b(quorum, round) == {[type |-> "P1b",round |-> round+1, valueRound |-> round,
                                         value |-> msg.value, acceptor |-> msg.acceptor] : msg \in FilterMessagesForQuorumRoundAndPhase(quorum,round,"P2b")}
 
 
-RecoverFromCollision(value) == /\ coordinatorValue = Any
-                               /\ \E quorum \in Quorum(coordinatorRound+1):
-                                    /\ \A r \in quorum: \E msg \in P1bImpliedByP2b(quorum,coordinatorRound): msg.acceptor=r
-                                    /\ IsValueInQuorum(quorum, coordinatorRound+1, P1bImpliedByP2b(quorum,coordinatorRound),value)
-                               /\ coordinatorValue' = value
-                               /\ coordinatorRound' = coordinatorRound+!
-                               /\ SendMessage([type |-> "P2a", round|-> coordinatorRound+1,value |-> value])
-                               /\ UNCHANGED <AcceptorVariables,OtherVariables>
+CoordinatorRecoverFromCollision(value) == /\ coordinatorValue = Any
+                                          /\ \E quorum \in Quorum(coordinatorRound+1):
+                                                /\ \A r \in quorum: \E msg \in P1bImpliedByP2b(quorum,coordinatorRound): msg.acceptor=r
+                                                /\ IsValueInQuorum(quorum, coordinatorRound+1, P1bImpliedByP2b(quorum,coordinatorRound),value)
+                                          /\ coordinatorValue' = value
+                                          /\ coordinatorRound' = coordinatorRound+!
+                                          /\ SendMessage([type |-> "P2a", round|-> coordinatorRound+1,value |-> value])
+                                          /\ UNCHANGED <<AcceptorVariables,OtherVariables>>
 
 LastMessageOfCoordinator == IF coordinatorValue = None
                             THEN [type |-> "P1a", round |-> coordinatorRound]
@@ -189,15 +189,65 @@ LastMessageOfCoordinator == IF coordinatorValue = None
 
 RetransmitLastMessageOfCoordinator == /\ coordinatorRound # 0
                                       /\ SendMessage(LastMessageOfCoordinator)
-                                      /\ UNCHANGED <AcceptorVariables,CoordinatorVariables,OtherVariables>
+                                      /\ UNCHANGED <<AcceptorVariables,CoordinatorVariables,OtherVariables>>
 
 FastPaxosCoordinatorNext == \/ \E round \in RoundNumber: FastPaxosPrepare(round)        \* Implementing Phase 1a of Coordinator
                             \/ \E value \in Values \union {Any}: FastPaxosAccept(value)
-                            \/ \E value \in Values RecoverFromCollision(value)
+                            \/ \E value \in Values CoordinatorRecoverFromCollision(value)
                             \/ RetransmitLastMessageOfCoordinator
 
 
 (* Actions Taken by Acceptor*)
+
+\* Phase 1b
+FastPaxosPromise(round,replica) == /\ rounds[replica] < round
+                                   /\ [type |-> "P1a", round |-> round] \in messages
+                                   /\ rounds' = [rounds EXCEPT ![replica]= round]
+                                   /\ SendMessage([type |->"P1b", round |-> round, valueRound |-> valueRounds[replica],
+                                        value |-> values[replica], acceptor |-> replica])
+                                   /\ UNCHANGED <<CoordinatorVariables,OtherVariables,valueRounds,values>>
+
+\* Phase 2b
+FastPaxosAccepted(round,replica,value) == /\ rounds[replica] <= round
+                                          /\ valueRounds[replica] < round
+                                          /\ \E msg \in messages:
+                                                /\ msg.type = "P2a"
+                                                /\ msg.round = round
+                                                /\ \/ msg.value = value
+                                                   \/ /\ msg.value = Any
+                                                      /\ value \in proposedValue
+                                          /\ rounds' = [rounds EXCEPT ![replica]=round]
+                                          /\ valueRounds' = [valueRounds EXCEPT ![replica]=round]
+                                          /\ values' = [values EXCEPT ![replica]=value]
+                                          /\ SendMessage([type |-> "P2b", round |-> round, value |-> value, acceptor |-> replica])
+                                          /\ UNCHANGED <<CoordinatorVariables,OtherVariables>>
+
+AcceptorRecoverFromCollision(round,replica,value) == /\ round+1 \in FastRoundNumber
+                                                     /\ rounds[replica] <= round
+                                                     /\ \E quorum \in Quorum(round+1):
+                                                        /\ \A q \in quorum : \E msg \in P1bImpliedByP2b(quorum,round): msg.acceptor = q
+                                                        /\ IsValueInQuorum(quorum, round+1,P1bImpliedByP2b(quorum,round),value)
+                                                     /\ valueRounds' = [valueRounds EXCEPT ![replica]=round+1]
+                                                     /\ values' = [values EXCEPT ![replica]=value]
+                                                     /\ rounds' = [rounds EXCEPT ![replica]=round+1]
+                                                     /\ SendMessage([type |-> "P2b",round |-> round, value |-> value,acceptor |-> replica])
+                                                     /\ UNCHANGED <<CoordinatorVariables,OtherVariables>>
+
+LastMessageOfAcceptor(replica) == IF valueRounds[replica] < rounds[replica]
+                                    THEN [type |-> "P1b", round |-> rounds[replica], valueRound |-> valueRounds[replica],
+                                            value |-> values[replica], acceptor |-> replica]
+                                    ELSE [type |-> "P2b", round |-> rounds[replica],value |-> values[replica], acceptor |-> replica]
+
+RetransmitLastMessageOfAcceptor(replica) == /\ rounds[replica] # 0
+                                            /\ SendMessage(LastMessageOfAcceptor(replica))
+                                            /\ UNCHANGED <<AcceptorVariables,CoordinatorVariables,OtherVariables>>
+
+FastPaxosAcceptorNext(replica) == \/ \E round \in RoundNumber: \/ FastPaxosPromise(round,replica)
+                                                               \/ \E value \in Values: FastPaxosAccepted(round,replica,value)
+                                  \/ \E round \in FastRoundNumber, value \in Values: AcceptorRecoverFromCollision(round,replica,value)
+                                  \/ RetransmitLastMessageOfAcceptor(replica)
+
+(*Remaining Actions*)
 
 
 FastPaxosSpec == /\ FastPaxosInit
