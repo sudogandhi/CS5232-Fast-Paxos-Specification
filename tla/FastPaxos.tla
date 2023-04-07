@@ -11,7 +11,7 @@ Explicitly specify the name of the coordinator.
 We are here also considering that the only coordinator is also the leader.
 *)
 CONSTANT Replicas, Coordinator
-CONSTANT None, Any, Values
+CONSTANT None, AnyVal, Values
 CONSTANT Ballots, Quorums(_), FaultTolerance
 CONSTANT FastRoundNumber        \* Set of Fast Rounds.
 
@@ -69,7 +69,7 @@ P1bMessage == [type : {"P1b"},
                round : RoundNumber,                       \* round is in set round.
                valueRound: RoundNumber \union {0},        \* round in which value is chosen
                acceptor : Replicas,                    \* Acceptor is in set Replicas.
-               value: Values \union {Any}]
+               value: Values \union {AnyVal}]
 
 P2aMessage == [type : {"P2a"},
                round : RoundNumber,                       \* round value is in set round.
@@ -103,9 +103,9 @@ AllVarialbes == <<AcceptorVariables,CoordinatorVariables,OtherVariables,messages
 \* Invariant for all the variables declared.
 FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
                    /\ valueRounds \in [Replicas -> Nat]
-                   /\ values \in [Replicas -> Values \union {Any}]
+                   /\ values \in [Replicas -> Values \union {AnyVal}]
                    /\ coordinatorRound \in  Nat
-                   /\ coordinatorValue \in Values \union {Any, None}
+                   /\ coordinatorValue \in Values \union {AnyVal, None}
                    /\ messages \in SUBSET Message
                    /\ proposedValue \in SUBSET  Values
                    /\ learnedValue \in SUBSET Values
@@ -113,7 +113,7 @@ FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
 
 FastPaxosInit == /\ rounds = [Replicas |-> 0]
                  /\ valueRounds = [Replicas |-> 0]
-                 /\ values = [Replicas |-> Any]
+                 /\ values = [Replicas |-> AnyVal]
                  /\ rounds = [Replicas |-> 0]
                  /\ coordinatorRound = 0
                  /\ coordinatorValue = None
@@ -151,7 +151,7 @@ IsValueInQuorum(quorum,round,msgs,val) == LET AcceptorRound(a) == (CHOOSE msg \i
                                                                             (AcceptorRound(a) = HighestRound) /\ (AcceptorValue(a) = val_)
                                           IN IF HighestRound = 0 THEN \/ val \in proposedValue
                                                                       \/ /\ round \in FastRoundNumber
-                                                                         /\ val = Any
+                                                                         /\ val = AnyVal
                                                                  ELSE IF Cardinality(HighestRoundValue) = 1
                                                                       THEN val \in HighestRoundValue
                                                                       ELSE IF \E val_ \in HighestRoundValue: IsValueChosen(val_)
@@ -161,7 +161,7 @@ IsValueInQuorum(quorum,round,msgs,val) == LET AcceptorRound(a) == (CHOOSE msg \i
 \* Implementing phase 2a for a value.
 FastPaxosAccept(value) == /\ coordinatorRound # 0
                           /\ coordinatorValue # None
-                          /\ \E quorum \in Quorum(coordinatorRound):
+                          /\ \E quorum \in Quorums(coordinatorRound):
                                 /\ \A r \in quorum: \E msg \in FilterMessagesForQuorumRoundAndPhase(quorum,coordinatorRound,"P1b"): msg.acceptor = r
                                 /\ IsValueInQuorum(quorum, coordinatorRound, FilterMessagesForQuorumRoundAndPhase(quorum,coordinatorRound,"P1b"),value)
                           /\ coordinatorValue' = value
@@ -173,12 +173,12 @@ P1bImpliedByP2b(quorum, round) == {[type |-> "P1b",round |-> round+1, valueRound
                                         value |-> msg.value, acceptor |-> msg.acceptor] : msg \in FilterMessagesForQuorumRoundAndPhase(quorum,round,"P2b")}
 
 
-CoordinatorRecoverFromCollision(value) == /\ coordinatorValue = Any
-                                          /\ \E quorum \in Quorum(coordinatorRound+1):
+CoordinatorRecoverFromCollision(value) == /\ coordinatorValue = AnyVal
+                                          /\ \E quorum \in Quorums(coordinatorRound+1):
                                                 /\ \A r \in quorum: \E msg \in P1bImpliedByP2b(quorum,coordinatorRound): msg.acceptor=r
                                                 /\ IsValueInQuorum(quorum, coordinatorRound+1, P1bImpliedByP2b(quorum,coordinatorRound),value)
                                           /\ coordinatorValue' = value
-                                          /\ coordinatorRound' = coordinatorRound+!
+                                          /\ coordinatorRound' = coordinatorRound+1
                                           /\ SendMessage([type |-> "P2a", round|-> coordinatorRound+1,value |-> value])
                                           /\ UNCHANGED <<AcceptorVariables,OtherVariables>>
 
@@ -192,8 +192,8 @@ RetransmitLastMessageOfCoordinator == /\ coordinatorRound # 0
                                       /\ UNCHANGED <<AcceptorVariables,CoordinatorVariables,OtherVariables>>
 
 FastPaxosCoordinatorNext == \/ \E round \in RoundNumber: FastPaxosPrepare(round)        \* Implementing Phase 1a of Coordinator
-                            \/ \E value \in Values \union {Any}: FastPaxosAccept(value)
-                            \/ \E value \in Values CoordinatorRecoverFromCollision(value)
+                            \/ \E value \in Values \union {AnyVal}: FastPaxosAccept(value)
+                            \/ \E value \in Values : CoordinatorRecoverFromCollision(value)
                             \/ RetransmitLastMessageOfCoordinator
 
 
@@ -214,7 +214,7 @@ FastPaxosAccepted(round,replica,value) == /\ rounds[replica] <= round
                                                 /\ msg.type = "P2a"
                                                 /\ msg.round = round
                                                 /\ \/ msg.value = value
-                                                   \/ /\ msg.value = Any
+                                                   \/ /\ msg.value = AnyVal
                                                       /\ value \in proposedValue
                                           /\ rounds' = [rounds EXCEPT ![replica]=round]
                                           /\ valueRounds' = [valueRounds EXCEPT ![replica]=round]
@@ -224,7 +224,7 @@ FastPaxosAccepted(round,replica,value) == /\ rounds[replica] <= round
 
 AcceptorRecoverFromCollision(round,replica,value) == /\ round+1 \in FastRoundNumber
                                                      /\ rounds[replica] <= round
-                                                     /\ \E quorum \in Quorum(round+1):
+                                                     /\ \E quorum \in Quorums(round+1):
                                                         /\ \A q \in quorum : \E msg \in P1bImpliedByP2b(quorum,round): msg.acceptor = q
                                                         /\ IsValueInQuorum(quorum, round+1,P1bImpliedByP2b(quorum,round),value)
                                                      /\ valueRounds' = [valueRounds EXCEPT ![replica]=round+1]
@@ -253,12 +253,12 @@ ProposeAValue(value) == /\ proposedValue' = proposedValue \union {value}
                  /\ UNCHANGED <<CoordinatorVariables,AcceptorVariables,messages,learnedValue,goodSet>>
 
 LearnValue(value) == /\ \E round \in RoundNumber: 
-                            \E quorum \in Quorum(round):
+                            \E quorum \in Quorums(round):
                                 \A q \in quorum:
                                     \E msg \in messages: /\ msg.type = "P2b"
                                                          /\ msg.round = round
                                                          /\ msg.value = value
-                                                         /\ msg.acceptor == q
+                                                         /\ msg.acceptor = q
                      /\ learnedValue' = learnedValue \union {value}
                      /\ UNCHANGED <<CoordinatorVariables,AcceptorVariables,messages,proposedValue,goodSet>>
 
