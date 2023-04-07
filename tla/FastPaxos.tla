@@ -249,6 +249,24 @@ FastPaxosAcceptorNext(replica) == \/ \E round \in RoundNumber: \/ FastPaxosPromi
 
 (*Remaining Actions*)
 
+ProposeAValue(value) == /\ proposedValue' = proposedValue \union {value}
+                 /\ UNCHANGED <<CoordinatorVariables,AcceptorVariables,messages,learnedValue,goodSet>>
+
+LearnValue(value) == /\ \E round \in RoundNumber: 
+                            \E quorum \in Quorum(round):
+                                \A q \in quorum:
+                                    \E msg \in messages: /\ msg.type = "P2b"
+                                                         /\ msg.round = round
+                                                         /\ msg.value = value
+                                                         /\ msg.acceptor == q
+                     /\ learnedValue' = learnedValue \union {value}
+                     /\ UNCHANGED <<CoordinatorVariables,AcceptorVariables,messages,proposedValue,goodSet>>
+
+RemainingAction == \E value \in Values: ProposeAValue(value) \/ LearnValue(value)
+
+FastPaxosNext == \/ FastPaxosCoordinatorNext
+                 \/ \E replica \in Replicas: FastPaxosAcceptorNext(replica)
+                 \/ RemainingAction
 
 FastPaxosSpec == /\ FastPaxosInit
 
