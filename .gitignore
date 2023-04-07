@@ -4,3 +4,4 @@
 
 tla/states/
 tla/*.pdf
+tla/FastPaxos.toolbox/*
