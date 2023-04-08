@@ -7,7 +7,7 @@
 EXTENDS TLC, Naturals, FiniteSets, Integers
 
 CONSTANTS Replicas
-CONSTANTS None, Values
+CONSTANTS None, AnyVal, Values
 CONSTANTS Ballots, Quorums
 
 VARIABLES messages \* Set of all messages sent.
@@ -28,7 +28,7 @@ P1bMessage == [type : {"P1b"},
 P2aMessage == [type : {"P2a"},
                ballot : Ballots,
                proposer : Replicas,
-               value : Values \union {Any}]
+               value : Values \union {AnyVal}]
 P2bMessage == [type : {"P2b"},
                ballot : Ballots,
                proposer : Replicas,
