@@ -130,18 +130,17 @@ PaxosTypeOK == /\ messages \subseteq Message
                /\ maxVBallot \in [Replicas -> Ballots]
                /\ maxValue \in [Replicas -> Values \union {none}]
 
-Nontriviality == /\ \/ decision = none
-                    \/ \E m \in p2aMessages : m.value = decision
-                 /\ \A m \in p1bMessages : /\ m.maxValue \in Values \/ 0 = m.maxVBallot
-                                           /\ m.maxValue = none \/ 0 < m.maxVBallot
+PaxosNontriviality ==
+    /\ \/ decision = none
+       \/ \E m \in p2aMessages : m.value = decision
+    /\ \A m \in p1bMessages : /\ m.maxValue \in Values \/ 0 = m.maxVBallot
+                              /\ m.maxValue = none \/ 0 < m.maxVBallot
 
-Consistency ==
-    \/ decision = none
-    \/ decision = decision'
+PaxosConsistency == decision = none \/ decision = decision'
 
-SafetyProperty == /\ [][Nontriviality]_<<messages, decision>>
-                  /\ [][Consistency]_<<messages, decision>>
+PaxosSafetyProperty == /\ [][PaxosNontriviality]_<<messages, decision>>
+                       /\ [][PaxosConsistency]_<<messages, decision>>
 
-Symmetry == Permutations(Values) \union Permutations(Replicas)
+PaxosSymmetry == Permutations(Values) \union Permutations(Replicas)
 
 ===============================================================

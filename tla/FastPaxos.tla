@@ -47,7 +47,9 @@ FastDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots, q \in FastQuorums :
         LET M == {m \in p2bMessages : m.ballot = b /\ m.acceptor \in q}
+            V == {w \in Values : \E m \in M : w = m.value}
         IN /\ \A a \in q : \E m \in M : m.acceptor = a
+           /\ Cardinality(V) = 1
            /\ \E m \in M : decision' = m.value
 
 \* Phase 2a
@@ -92,5 +94,14 @@ FastNext == \/ FastAccept
 
 FastSpec == /\ FastInit
             /\ [][FastNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
+
+FastNontriviality == decision = none \/ \E m \in p2bMessages : m.value = decision
+
+FastConsistency == PaxosConsistency
+
+FastSafetyProperty == /\ [][FastNontriviality]_<<messages, decision>>
+                      /\ [][FastConsistency]_<<messages, decision>>
+
+FastSymmetry == PaxosSymmetry
 
 ===============================================================
