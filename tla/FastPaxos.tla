@@ -16,13 +16,12 @@ FastAssume == /\ \A q \in FastQuorums : q \subseteq Replicas
 
 ASSUME PaxosAssume /\ FastAssume
 
-IsMajorityValue(M, v) == Cardinality({m \in M : m.value = v}) > Cardinality(M) \div 2
+IsMajorityValue(M, v) == Cardinality(M) \div 2 < Cardinality({m \in M : m.value = v})
 
 \* Phase 2a (Any)
 FastAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots :
-        /\ p2bMessages = {} \* No proposed values yet.
         /\ SendMessage([type |-> "P2a",
                         ballot |-> b,
                         value |-> any])
@@ -49,7 +48,7 @@ FastDecide ==
         LET M == {m \in p2bMessages : m.ballot = b /\ m.acceptor \in q}
             V == {w \in Values : \E m \in M : w = m.value}
         IN /\ \A a \in q : \E m \in M : m.acceptor = a
-           /\ Cardinality(V) = 1
+           /\ 1 = Cardinality(V)
            /\ \E m \in M : decision' = m.value
 
 \* Phase 2a
@@ -61,7 +60,7 @@ ClassicAccept ==
         /\ LET M == {m \in p2bMessages : m.ballot = f /\ m.acceptor \in q}
                V == {w \in Values : \E m \in M : w = m.value}
            IN /\ \A a \in q : \E m \in M : m.acceptor = a
-              /\ Cardinality(V) > 1 \* Collision occured.
+              /\ 1 < Cardinality(V) \* Collision occured.
               /\ IF \E w \in V : IsMajorityValue(M, w)
                  THEN IsMajorityValue(M, v) \* Choose majority in quorum.
                  ELSE v \in V \* Choose any.
@@ -95,7 +94,8 @@ FastNext == \/ FastAccept
 FastSpec == /\ FastInit
             /\ [][FastNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
 
-FastNontriviality == decision = none \/ \E m \in p2bMessages : m.value = decision
+FastNontriviality == \/ decision = none
+                     \/ \E m \in p2bMessages : m.value = decision /\ m.ballot \in FastBallots
 
 FastConsistency == PaxosConsistency
 
