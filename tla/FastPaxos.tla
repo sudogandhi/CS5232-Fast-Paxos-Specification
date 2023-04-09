@@ -45,7 +45,7 @@ VARIABLE proposedValue
 VARIABLE learnedValue
 VARIABLE goodSet
 
-RoundNumber == Nat \ {0}        \* set of positive round numbers
+RoundNumber ==  {0,1,2,3,4}       \* set of positive round numbers
 
 ASSUME IsFiniteSet(Replicas) \* Set of Replicas should be a Finite set.
 ASSUME Coordinator \in Replicas \* Assumption related to coordinator that it should be a member of Replicas set.
@@ -101,20 +101,19 @@ OtherVariables == <<proposedValue,learnedValue,goodSet>>
 AllVarialbes == <<AcceptorVariables,CoordinatorVariables,OtherVariables,messages>>
 
 \* Invariant for all the variables declared.
-FastPaxosTypeOK == /\ rounds \in [Replicas -> Nat]
-                   /\ valueRounds \in [Replicas -> Nat]
+FastPaxosTypeOK == /\ rounds \in [Replicas -> RoundNumber]
+                   /\ valueRounds \in [Replicas -> RoundNumber]
                    /\ values \in [Replicas -> Values \union {AnyVal}]
-                   /\ coordinatorRound \in  Nat
+                   /\ coordinatorRound \in  RoundNumber 
                    /\ coordinatorValue \in Values \union {AnyVal, None}
                    /\ messages \in SUBSET Message
                    /\ proposedValue \in SUBSET  Values
                    /\ learnedValue \in SUBSET Values
                    /\ goodSet \subseteq Replicas
 
-FastPaxosInit == /\ rounds = [Replicas |-> 0]
-                 /\ valueRounds = [Replicas |-> 0]
-                 /\ values = [Replicas |-> AnyVal]
-                 /\ rounds = [Replicas |-> 0]
+FastPaxosInit == /\ rounds = [r \in Replicas |-> 0]
+                 /\ valueRounds = [r \in Replicas |-> 0]
+                 /\ values = [r \in Replicas |-> AnyVal]
                  /\ coordinatorRound = 0
                  /\ coordinatorValue = None
                  /\ messages = {}
@@ -268,6 +267,6 @@ FastPaxosNext == \/ FastPaxosCoordinatorNext
                  \/ \E replica \in Replicas: FastPaxosAcceptorNext(replica)
                  \/ RemainingAction
 
-FastPaxosSpec == /\ FastPaxosInit
+FastPaxosSpec == /\ FastPaxosInit /\ [][FastPaxosNext]_AllVarialbes
 
 ===============================================================
