@@ -14,8 +14,6 @@ VARIABLES maxBallot \* Maximum ballot an acceptor has seen.
 VARIABLES maxVBallot \* Maximum ballot an acceptor has accepted.
 VARIABLES maxValue \* Maximum value an acceptor has accepted.
 
-vars == <<messages, decision, maxBallot, maxVBallot, maxValue>>
-
 P1aMessage == [type : {"P1a"},
                ballot : Ballots \ {0}]
 P1bMessage == [type : {"P1b"},
@@ -190,7 +188,9 @@ PaxosNext == \/ PaxosPrepare
              \/ PaxosDecide
              \/ PaxosSuccess
 
-PaxosSpec == PaxosInit /\ [][PaxosNext]_vars /\ SF_vars(PaxosSuccess)
+PaxosSpec == /\ PaxosInit
+             /\ [][PaxosNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
+             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue>>(PaxosSuccess)
 
 PaxosTypeOK == /\ messages \subseteq Message
                /\ decision \in Values \union {none}
@@ -208,7 +208,8 @@ PaxosNontriviality ==
 \* At most 1 value can be learned.
 PaxosConsistency == decision = none \/ decision = decision'
 
-PaxosSafetyProperty == [][PaxosNontriviality]_vars /\ [][PaxosConsistency]_vars
+PaxosSafetyProperty == /\ [][PaxosNontriviality]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
+                       /\ [][PaxosConsistency]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
 
 PaxosSymmetry == Permutations(Values) \union Permutations(Replicas)
 
