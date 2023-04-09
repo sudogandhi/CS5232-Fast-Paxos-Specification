@@ -133,7 +133,7 @@ FastPaxosPrepare(i) == /\ coordinatorRound < i          \* coordinator's round n
                           \/ /\ coordinatorRound \in FastRoundNumber        \* coordinator previouslt participated in a fast round.
                              /\ i \in ClassicRoundRoundNumber               \* but the current round is a classic round.
                        /\ coordinatorRound' = i
-                       /\ coordinatorValue = None
+                       /\ coordinatorValue' = None
                        /\ SendMessage([type |-> "P1a",round |-> i])
                        /\ UNCHANGED <<AcceptorVariables,OtherVariables>>
 
