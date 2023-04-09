@@ -6,9 +6,9 @@ CONSTANTS FastQuorums, FastBallots
 
 VARIABLES messages, decision, maxBallot, maxVBallot, maxValue
 
-ClassicBallots == Ballots \ FastBallots
-
 INSTANCE Paxos
+
+ClassicBallots == Ballots \ FastBallots
 
 FastAssume == /\ \A q \in FastQuorums : q \subseteq Replicas
               /\ \A q, r \in FastQuorums : q \intersect r # {}
@@ -16,7 +16,9 @@ FastAssume == /\ \A q \in FastQuorums : q \subseteq Replicas
 
 ASSUME PaxosAssume /\ FastAssume
 
-\* Phase 2a (any) - Start a fast round.
+IsMajorityValue(M, v) == Cardinality({m \in M : m.value = v}) > Cardinality(M) \div 2
+
+\* Phase 2a (Any)
 FastAny ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots :
@@ -25,21 +27,7 @@ FastAny ==
                         ballot |-> b,
                         value |-> any])
 
-\* In a classic round, there was a fast round previously that had a collision.
-FastAccept ==
-    /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
-    /\ \E b \in ClassicBallots, f \in FastBallots, q \in FastQuorums, v \in Values :
-        /\ f < b
-        /\ LET M == {m \in p2bMessages : m.ballot = f /\ m.acceptor \in q}
-               V == {w \in Values : \E m \in M : w = m.value}
-           IN /\ \A a \in q : \E m \in M : m.acceptor = a
-              /\ Cardinality(V) > 1 \* Collision occured.
-              /\ IF \E w \in V : Cardinality({m \in M : m.value = w}) > Cardinality(M) \div 2
-                 THEN Cardinality({m \in M : m.value = v}) > Cardinality(M) \div 2
-                 ELSE v \in V
-              /\ SendMessage([type |-> "P2a", ballot |-> b, value |-> v])
-
-\* Phase 2b (any)
+\* Phase 2b (Any)
 FastAccepted ==
     /\ UNCHANGED<<decision>>
     /\ \E a \in Replicas, m \in p2aMessages, v \in Values:
@@ -54,10 +42,38 @@ FastAccepted ==
                         acceptor |-> a,
                         value |-> v])
 
-\* Phase 3
+\* Phase 3 (Any)
 FastDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots, q \in FastQuorums :
+        LET M == {m \in p2bMessages : m.ballot = b /\ m.acceptor \in q}
+        IN /\ \A a \in q : \E m \in M : m.acceptor = a
+           /\ \E m \in M : decision' = m.value
+
+\* Phase 2a
+ClassicAccept ==
+    /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
+    /\ \E b \in ClassicBallots, f \in FastBallots, q \in FastQuorums, v \in Values :
+        /\ f < b \* There was a fast round before this classic round.
+        /\ \A m \in p2aMessages : m.ballot # b
+        /\ LET M == {m \in p2bMessages : m.ballot = f /\ m.acceptor \in q}
+               V == {w \in Values : \E m \in M : w = m.value}
+           IN /\ \A a \in q : \E m \in M : m.acceptor = a
+              /\ Cardinality(V) > 1 \* Collision occured.
+              /\ IF \E w \in V : IsMajorityValue(M, w)
+                 THEN IsMajorityValue(M, v) \* Choose majority in quorum.
+                 ELSE v \in V \* Choose any.
+              /\ SendMessage([type |-> "P2a",
+                              ballot |-> b,
+                              value |-> v])
+
+\* Phase 2b
+ClassicAccepted == PaxosAccepted
+
+\* Phase 3
+ClassicDecide ==
+    /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
+    /\ \E b \in ClassicBallots, q \in Quorums :
         LET M == {m \in p2bMessages : m.ballot = b /\ m.acceptor \in q}
         IN /\ \A a \in q : \E m \in M : m.acceptor = a
            /\ \E m \in M : decision' = m.value
@@ -67,12 +83,11 @@ FastTypeOK == PaxosTypeOK
 FastInit == PaxosInit
 
 FastNext == \/ FastAny
-            \/ FastAccept
             \/ FastAccepted
-            \/ PaxosAccept
-            \/ PaxosAccepted
-            \/ PaxosDecide
             \/ FastDecide
+            \/ ClassicAccept
+            \/ ClassicAccepted
+            \/ ClassicDecide
             \/ PaxosSuccess
 
 FastSpec == /\ FastInit

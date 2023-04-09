@@ -4,7 +4,7 @@
     1. Square brackets can be used to define a set of functions. [X -> Y]
     2. Curly brackets can be used to define a set of values. {x \in SUBSET X}
 *)
-EXTENDS TLC, Naturals, FiniteSets, Integers
+EXTENDS TLC, Naturals, FiniteSets, Integers, Sequences
 
 CONSTANTS any, none, Replicas, Values, Ballots, Quorums
 
@@ -31,7 +31,7 @@ P2bMessage == [type : {"P2b"},
 Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage
 
 PaxosAssume == /\ IsFiniteSet(Replicas)
-               /\ any \notin Values
+               /\ any \notin Values \union {none}
                /\ none \notin Values \union {any}
                /\ Ballots \subseteq Nat /\ 0 \in Ballots
                /\ \A q \in Quorums : q \subseteq Replicas
@@ -105,7 +105,7 @@ PaxosDecide ==
 PaxosSuccess ==
     /\ UNCHANGED<<messages, decision, maxBallot, maxVBallot, maxValue>>
     /\ decision \in Values
-    /\ Print("Success", TRUE)
+    /\ Print(Append("Success! Value: ", ToString(decision)), TRUE)
 
 PaxosInit == /\ messages = {}
              /\ decision = none
