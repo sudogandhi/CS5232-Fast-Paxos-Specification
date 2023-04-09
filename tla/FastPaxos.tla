@@ -18,7 +18,11 @@ ASSUME PaxosAssume /\ FastAssume
 
 IsMajorityValue(M, v) == Cardinality(M) \div 2 < Cardinality({m \in M : m.value = v})
 
-\* Phase 2a (Any)
+(*
+    Phase 2a (Fast):
+
+    In a fast round, the coordinator can send an P2a "any" message.
+*)
 FastAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots :
@@ -26,7 +30,12 @@ FastAccept ==
                         ballot |-> b,
                         value |-> any])
 
-\* Phase 2b (Any)
+(*
+    Phase 2b (Fast):
+
+    Acceptors can reply to a P2a "any" message with a P2b message
+    containing their proposed value.
+*)
 FastAccepted ==
     /\ UNCHANGED<<decision>>
     /\ \E a \in Replicas, m \in p2aMessages, v \in Values:
@@ -41,7 +50,7 @@ FastAccepted ==
                         acceptor |-> a,
                         value |-> v])
 
-\* Phase 3 (Any)
+\* A value is chosen if a fast quorum of acceptors proposed that value in a fast round.
 FastDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in FastBallots, q \in FastQuorums :
@@ -51,7 +60,19 @@ FastDecide ==
            /\ 1 = Cardinality(V)
            /\ \E m \in M : decision' = m.value
 
-\* Phase 2a
+(*
+    Phase 2a (Classic)
+
+    If more than one value has been proposed, the collision is resolved using the following rules:
+
+    1. If at most a single value is present in the votes,
+       then the coordinator must select that value.
+
+    2. If the votes contain different values, a value must
+       be selected if the majority of acceptors in the quorum
+       have casted a vote for that value. Otherwise, the
+       coordinator is free to select any value.
+*)
 ClassicAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in ClassicBallots, f \in FastBallots, q \in FastQuorums, v \in Values :
@@ -68,10 +89,10 @@ ClassicAccept ==
                               ballot |-> b,
                               value |-> v])
 
-\* Phase 2b
+\* Phase 2b (Classic)
 ClassicAccepted == PaxosAccepted
 
-\* Phase 3
+\* Classic consensus.
 ClassicDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in ClassicBallots, q \in Quorums :
@@ -91,16 +112,16 @@ FastNext == \/ FastAccept
             \/ ClassicDecide
             \/ PaxosSuccess
 
-FastSpec == /\ FastInit
-            /\ [][FastNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
+FastSpec == FastInit /\ [][FastNext]_vars /\ SF_vars(PaxosSuccess)
 
+\* Only proposed values can be learned.
 FastNontriviality == \/ decision = none
                      \/ \E m \in p2bMessages : m.value = decision /\ m.ballot \in FastBallots
 
+\* At most 1 value can be learned.
 FastConsistency == PaxosConsistency
 
-FastSafetyProperty == /\ [][FastNontriviality]_<<messages, decision>>
-                      /\ [][FastConsistency]_<<messages, decision>>
+FastSafetyProperty == [][FastNontriviality]_vars /\ [][FastConsistency]_vars
 
 FastSymmetry == PaxosSymmetry
 
