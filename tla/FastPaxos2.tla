@@ -26,7 +26,7 @@ FastAny ==
                         value |-> any])
 
 \* In a classic round, there was a fast round previously that had a collision.
-FastCollision ==
+FastAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
     /\ \E b \in ClassicBallots, f \in FastBallots, q \in FastQuorums, v \in Values :
         /\ f < b
@@ -34,8 +34,9 @@ FastCollision ==
                V == {w \in Values : \E m \in M : w = m.value}
            IN /\ \A a \in q : \E m \in M : m.acceptor = a
               /\ Cardinality(V) > 1 \* Collision occured.
-              /\ \/ Cardinality({m \in M : m.value = v}) > Cardinality(M) \div 2 \* Choose majority
-                 \/ v \in V \* Choose any
+              /\ IF \E w \in V : Cardinality({m \in M : m.value = w}) > Cardinality(M) \div 2
+                 THEN Cardinality({m \in M : m.value = v}) > Cardinality(M) \div 2
+                 ELSE v \in V
               /\ SendMessage([type |-> "P2a", ballot |-> b, value |-> v])
 
 \* Phase 2b (any)
@@ -66,6 +67,7 @@ FastTypeOK == PaxosTypeOK
 FastInit == PaxosInit
 
 FastNext == \/ FastAny
+            \/ FastAccept
             \/ FastAccepted
             \/ PaxosAccept
             \/ PaxosAccepted
