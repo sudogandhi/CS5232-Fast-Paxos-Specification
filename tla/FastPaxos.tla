@@ -29,7 +29,6 @@ FastAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue, cValue>>
     /\ \E f \in FastBallots :
         /\ cValue = none
-        /\ {m \in p2aMessages : m.value \in Values} = {} \* Has not been "degraded" to Classic Paxos.
         /\ SendMessage([type |-> "P2a",
                         ballot |-> f,
                         value |-> any])
