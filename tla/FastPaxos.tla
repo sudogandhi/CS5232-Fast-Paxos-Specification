@@ -4,8 +4,12 @@ EXTENDS TLC, Naturals, FiniteSets, Integers
 CONSTANTS any, none, Replicas, Values, Ballots, Quorums
 CONSTANTS FastQuorums, FastBallots
 
-VARIABLES messages, decision, maxBallot, maxVBallot, maxValue
-VARIABLES cValue
+VARIABLES messages \* Set of all messages sent.
+VARIABLES decision \* Decided value of an acceptor.
+VARIABLES maxBallot \* Maximum ballot an acceptor has seen.
+VARIABLES maxVBallot \* Maximum ballot an acceptor has accepted.
+VARIABLES maxValue \* Maximum value an acceptor has accepted.
+VARIABLES cValue \* Value chosen by coordinator.
 
 INSTANCE Paxos
 
