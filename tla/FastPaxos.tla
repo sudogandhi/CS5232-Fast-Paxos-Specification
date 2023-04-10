@@ -69,13 +69,11 @@ FastDecide ==
 
     If more than one value has been proposed, the collision is resolved using the following rules:
 
-    1. If at most a single value is present in the votes,
-       then the coordinator must select that value.
-
-    2. If the votes contain different values, a value must
+    1. If the votes contain different values, a value must
        be selected if the majority of acceptors in the quorum
-       have casted a vote for that value. Otherwise, the
-       coordinator is free to select any value.
+       have casted a vote for that value.
+       
+    2. Otherwise, the coordinator is free to select any value.
 *)
 ClassicAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
