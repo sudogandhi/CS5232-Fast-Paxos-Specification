@@ -121,7 +121,7 @@ FastSpec == /\ FastInit
             /\ [][FastNext]_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>
             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(PaxosSuccess)
 
-\* Only proposed values can be learned.
+\* Only proposed values can be learnt.
 FastNontriviality == \/ decision = none
                      \/ \E m \in p2bMessages : m.value = decision /\ m.ballot \in FastBallots
 

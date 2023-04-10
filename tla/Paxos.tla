@@ -198,14 +198,14 @@ PaxosTypeOK == /\ messages \subseteq Message
                /\ maxVBallot \in [Replicas -> Ballots]
                /\ maxValue \in [Replicas -> Values \union {none}]
 
-\* Only proposed values can be learned.
+\* Only proposed values can be learnt.
 PaxosNontriviality ==
     /\ \/ decision = none
        \/ \E m \in p2aMessages : m.value = decision
     /\ \A m \in p1bMessages : /\ m.maxValue \in Values \/ 0 = m.maxVBallot
                               /\ m.maxValue = none \/ 0 < m.maxVBallot
 
-\* At most 1 value can be learned.
+\* At most 1 value can be learnt.
 PaxosConsistency == decision = none \/ decision = decision'
 
 PaxosSafetyProperty == /\ [][PaxosNontriviality]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
