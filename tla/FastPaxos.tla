@@ -32,7 +32,6 @@ IsMajorityValue(M, v) == Cardinality(M) \div 2 < Cardinality({m \in M : m.value 
 FastAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue, cValue>>
     /\ \E f \in FastBallots :
-        /\ cValue = none
         /\ SendMessage([type |-> "P2a",
                         ballot |-> f,
                         value |-> any])
