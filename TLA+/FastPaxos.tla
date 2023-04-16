@@ -12,7 +12,7 @@
 
     2. All agents in the system can communicate with one another.
 
-    3. Agents must have some stable storage that survives failure ands restart.
+    3. Agents must have some stable storage that survives failure and restarts.
        An agent restores its state from stable storage when it restarts, so the failure of an agent
        is indistinguishable from its simply pausing. There is thus no need to model failures explicitly.
 *)
