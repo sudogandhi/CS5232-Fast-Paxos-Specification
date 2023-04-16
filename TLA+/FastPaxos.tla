@@ -77,6 +77,10 @@ FastPropose ==
 
 (*
     A value is chosen if a fast quorum of acceptors proposed that value in a fast round.
+
+    Because the quorum size of a fast round and classic round is different, we assume that the acceptor distinguishes
+    a fast round and classic round based on the P2a message it receives. If the P2a message contains the special value
+    "any", it is a fast round. Else it is a classic round.
 *)
 FastDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue, cValue>>
