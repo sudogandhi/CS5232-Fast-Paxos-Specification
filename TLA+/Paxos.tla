@@ -1,10 +1,9 @@
 --------------------------- MODULE Paxos -----------------------------
 (*
-    Notes:
-    1. Square brackets can be used to define a set of functions. [X -> Y]
-    2. Curly brackets can be used to define a set of values. {x \in SUBSET X}
+    This is a specification of the Paxos protocol without explicit leaders or learners.
 *)
-EXTENDS TLC, Naturals, FiniteSets, Integers, Sequences
+
+EXTENDS TLC, Naturals, FiniteSets, Integers
 
 CONSTANTS any, none, Replicas, Values, Ballots, Quorums
 
@@ -14,6 +13,7 @@ VARIABLES maxBallot \* Maximum ballot an acceptor has seen.
 VARIABLES maxVBallot \* Maximum ballot an acceptor has accepted.
 VARIABLES maxValue \* Maximum value an acceptor has accepted.
 
+\* Set of all possible messages.
 P1aMessage == [type : {"P1a"},
                ballot : Ballots \ {0}]
 P1bMessage == [type : {"P1b"},
@@ -30,14 +30,14 @@ P2bMessage == [type : {"P2b"},
                value : Values]
 Message == P1aMessage \union P1bMessage \union P2aMessage \union P2bMessage
 
-PaxosAssume == /\ IsFiniteSet(Replicas)
-               /\ any \notin Values \union {none}
-               /\ none \notin Values \union {any}
-               /\ Ballots \subseteq Nat /\ 0 \in Ballots
-               /\ \A q \in Quorums : q \subseteq Replicas
-               /\ \A q, r \in Quorums : q \intersect r # {}
-
-ASSUME PaxosAssume
+ASSUME PaxosAssume ==
+    /\ IsFiniteSet(Replicas)
+    /\ any \notin Values \union {none}
+    /\ none \notin Values \union {any}
+    /\ Ballots \subseteq Nat /\ 0 \in Ballots
+    /\ \A q \in Quorums : q \subseteq Replicas
+    /\ \A q \in Quorums : Cardinality(Replicas) \div 2 < Cardinality(q)
+    /\ \A q, r \in Quorums : q \intersect r # {}
 
 p1aMessages == {m \in messages : m.type = "P1a"} \* Set of all P1a messages sent.
 p1bMessages == {m \in messages : m.type = "P1b"} \* Set of all P1b messages sent.
@@ -51,19 +51,22 @@ SendMessage(m) == messages' = messages \union {m}
 (*
     Phase 1a:
 
-    A Proposer creates a message, which we call a "Prepare", identified with a ballot b.
+    A proposer creates a message, which we call a "Prepare", identified with a ballot number b.
     Note that b is not the value to be proposed and maybe agreed on, but just a number
     which uniquely identifies this initial message by the proposer (to be sent to the acceptors).
 
-    The ballot b must be greater than any ballot used in any of the previous Prepare messages by this Proposer.
-    But since the system is asynchronous, and messages may be delayed and arrive later, there is no need to explicitly
-    model this.
+    While ballot number b must be greater than any ballot number used in any of the previous Prepare messages by this proposer,
+    since the system is asynchronous and messages may be delayed and arrive out-of-order, there is no need to explicitly model this.
 
-    Then, it sends the Prepare message containing b to at least a Quorum of Acceptors.
-    Note that the Prepare message only contains the ballot b (that is, it does not have to contain the proposed
-    value).
+    Then, it sends the Prepare message containing b to at least a quorum of acceptors.
+    Note that the Prepare message only contains the ballot number b (that is, it does not have to contain the proposed value).
 
     A Proposer should not initiate Paxos if it cannot communicate with at least a Quorum of Acceptors.
+
+    Some implementations may include the identity of the proposer, but that is omitted in this specification.
+    Because while it is possible for multiple proposers to send a Prepare message with the same ballot number,
+    only one of them can possibly receive a quorum of Promise replies. Thus, it is impossible for more than one proposer
+    to have the same ballot number in Phase 2a.
 *)
 PaxosPrepare ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
@@ -74,19 +77,17 @@ PaxosPrepare ==
 (*
     Phase 1b:
 
-    Any of the Acceptors waits for a Prepare message from any of the Proposers.
-    If an Acceptor receives a Prepare message, the Acceptor must look at the ballot b of the just received Prepare message.
+    Any of the acceptors waits for a Prepare message from any of the proposers.
+    If an acceptor receives a Prepare message, the acceptor must look at the ballot number b of the just received Prepare message.
 
     There are two cases:
 
-        1. If b is higher than every previous proposal number received, from any of the Proposers, by the Acceptor,
-           then the Acceptor must return a message, which we call a "Promise", to the Proposer, to ignore all future
-           proposals having a ballot less than b. If the Acceptor accepted a proposal at some point in the past, it
-           must include the previous proposal number, say u, and the corresponding accepted value, say w, in its response to the Proposer.
+        1. If b is higher than every previous proposal number received, from any of the proposers, by the acceptor,
+           then the acceptor must return a message, which we call a "Promise", to the proposer, to ignore all future
+           proposals having a ballot less than b. If the acceptor accepted a proposal at some point in the past, it
+           must include the previous proposal number and the corresponding accepted value in its response to the proposer.
 
-        2. Otherwise (that is, b is less than or equal to any previous proposal number received from any
-           Proposer by the Acceptor) the Acceptor can ignore the received proposal.
-           It does not have to answer in this case for Paxos to work.
+        2. Otherwise the acceptor can ignore the received proposal. It does not have to answer in this case for Paxos to work.
 *)
 PaxosPromise ==
     /\ UNCHANGED<<decision, maxVBallot, maxValue>>
@@ -102,17 +103,17 @@ PaxosPromise ==
 (*
     Phase 2a:
 
-    If a Proposer receives Promises from a Quorum of Acceptors, it needs to set a value v to its proposal.
-    If any Acceptors had previously accepted any proposal, then they'll have sent their values to the Proposer,
+    If a proposer receives Promises from a quorum of acceptors, it needs to set a value v to its proposal.
+    If any acceptors had previously accepted any proposal, then they'll have sent their values to the proposer,
     who now must set the value of its proposal, v, to the value associated with the highest proposal ballot reported by
-    the Acceptors, let's call it z. If none of the Acceptors had accepted a proposal up to this point, then the Proposer
+    the acceptors, let's call it z. If none of the acceptors had accepted a proposal up to this point, then the proposer
     may choose the value it originally wanted to propose, say x.
 
-    The Proposer sends an Accept message, (b, v), to a Quorum of Acceptors with the chosen value for its proposal, v, and the ballot
-    number b (which is the same as the number contained in the Prepare message previously sent to the Acceptors). So, the Accept message
-    is either (b, v=z) or, in case none of the Acceptors previously accepted a value, (n, v=x).
+    The proposer sends an Accept message, (b, v), to a quorum of acceptors with the chosen value for its proposal, v, and the ballot
+    number b (which is the same as the number contained in the Prepare message previously sent to the acceptors). So, the Accept message
+    is either (b, v=z) or, in case none of the Acceptors previously accepted a value, (b, v=x).
 
-    This Accept message should be interpreted as a "request", as in "Accept this proposal, please!". 
+    This Accept message should be interpreted as a "request", as in "Accept this proposal, please!".
 *)
 PaxosAccept ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue>>
@@ -129,12 +130,12 @@ PaxosAccept ==
 (*
     Phase 2b:
 
-    If an Acceptor receives an Accept message, (b, v), from a Proposer, it must accept it if and only if it has not already
+    If an acceptor receives an Accept message, (b, v), from a proposer, it must accept it if and only if it has not already
     promised (in Phase 1b of the Paxos protocol) to only consider proposals having a ballot greater than b.
 
-    If the Acceptor has not already promised (in Phase 1b) to only consider proposals having a ballot greater than b,
-    it should register the value v (of the just received Accept message) as the accepted value (of the Protocol), and send
-    an Accepted message to the Proposer and every Acceptor.
+    If the acceptor has not already promised (in Phase 1b) to only consider proposals having a ballot greater than b,
+    it should register the value v (of the just received Accept message) as the accepted value (of the protocol), and send
+    an Accepted message to the proposer and every acceptor.
 
     Else, it can ignore the Accept message or request.
 *)
@@ -152,15 +153,13 @@ PaxosAccepted ==
                         value |-> m.value])
 
 (*
-    Consensus is achieved when a majority of Acceptors accept the same ballot (rather than the same value).
-    Because each ballot is unique to a Proposer and only one value may be proposed per ballot, all Acceptors
+    Consensus is achieved when a majority of acceptors accept the same ballot number (rather than the same value).
+    Because each ballot is unique to a proposer and only one value may be proposed per ballot, all acceptors
     that accept the same ballot thereby accept the same value.
 
-    These facts result in a few counter-intuitive scenarios that do not impact correctness:
-
-        1. Acceptors can accept multiple values, a value may achieve a majority across Acceptors (with different ballots) only to later be changed.
-        2. Acceptors may continue to accept proposals after an identifier has achieved a majority.
-        3. However, the Paxos protocol guarantees that consensus is permanent and the chosen value is immutable. 
+    There is no need to model the variable decision for every acceptor. In this specification, the variable decision
+    represents the decision of any acceptor, can its value may potentially be changed multiple times. Instead, we use
+    the consistency safety property to proof that the decision for every acceptor is the same.
 *)
 PaxosDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue>>
@@ -169,11 +168,11 @@ PaxosDecide ==
         IN /\ \A a \in q : \E m \in M : m.acceptor = a
            /\ \E m \in M : decision' = m.value
 
-\* Success is achieved when all replicas reach a consensus.
-PaxosSuccess ==
-    /\ UNCHANGED<<messages, decision, maxBallot, maxVBallot, maxValue>>
-    /\ decision \in Values
-    /\ Print(Append("Success! Value: ", ToString(decision)), TRUE)
+PaxosTypeOK == /\ messages \subseteq Message
+               /\ decision \in Values \union {none}
+               /\ maxBallot \in [Replicas -> Ballots]
+               /\ maxVBallot \in [Replicas -> Ballots]
+               /\ maxValue \in [Replicas -> Values \union {none}]
 
 PaxosInit == /\ messages = {}
              /\ decision = none
@@ -186,17 +185,10 @@ PaxosNext == \/ PaxosPrepare
              \/ PaxosAccept
              \/ PaxosAccepted
              \/ PaxosDecide
-             \/ PaxosSuccess
 
 PaxosSpec == /\ PaxosInit
              /\ [][PaxosNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
-             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue>>(PaxosSuccess)
-
-PaxosTypeOK == /\ messages \subseteq Message
-               /\ decision \in Values \union {none}
-               /\ maxBallot \in [Replicas -> Ballots]
-               /\ maxVBallot \in [Replicas -> Ballots]
-               /\ maxValue \in [Replicas -> Values \union {none}]
+             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue>>(PaxosDecide)
 
 \* Only proposed values can be learnt.
 PaxosNontriviality ==
