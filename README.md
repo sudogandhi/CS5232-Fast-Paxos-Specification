@@ -1,1 +1,20 @@
-# CS-5232-Formal-Specification-and-Design-Project
+# CS5232 Research Project: Specifying Fast Paxos in TLA+
+
+## Software Prerequisites
+
+Please, make sure to install
+[Visual Studio Code](https://code.visualstudio.com/download) and its
+[TLA+ Extension](https://marketplace.visualstudio.com/items?itemName=alygin.vscode-tlaplus),
+following the instructions on the linked pages. Also, consider adding the
+[following command](https://github.com/alygin/vscode-tlaplus/wiki/Automatic-Module-Parsing)
+to your VSCode setting to parse your TLA+ code automatically.
+
+## Running the TLA+ Model
+
+After installing the TLA+ extension for VSCode, Simply open FastPaxos.tla or Paxos.tla in VSCode, right click anywhere in the file editor, and click "Check model with TLC".
+
+## Estimated Model Verification Time
+
+The following timings were achieved on a 6-core, 12-thread CPU:
+- Paxos.tla: 4 seconds
+- FastPaxos.tla: 1 minute 2 seconds

@@ -1,4 +1,22 @@
 --------------------------- MODULE FastPaxos -----------------------------
+(*
+    This is a simplified specification of Leslie Lamport's Fast Paxos protocol.
+    The following papers, Fast Paxos by Leslie Lamport and Fast Paxos Made Easy: Theory and Implementation by Zhao Wenbing
+    was referenced in writing this specification.
+
+    This simplified specification was written by Lim Ngian Xin Terry & Gaurav Gandhi.
+
+    The following assumptions are made in this simplified specification.
+
+    1. There is a unique coordinator in the system. Therefore, Phase 1a and 1b can be omitted.
+
+    2. All agents in the system can communicate with one another.
+
+    3. Agents must have some stable storage that survives failure and restarts.
+       An agent restores its state from stable storage when it restarts, so the failure of an agent
+       is indistinguishable from its simply pausing. There is thus no need to model failures explicitly.
+*)
+
 EXTENDS TLC, Naturals, FiniteSets, Integers
 
 CONSTANTS any, none, Replicas, Values, Ballots, Quorums
@@ -13,11 +31,13 @@ VARIABLES cValue \* Value chosen by coordinator.
 
 INSTANCE Paxos
 
-ClassicBallots == Ballots \ FastBallots
+ClassicBallots == Ballots \ FastBallots \* The set of ballots of classic rounds.
 
-FastAssume == /\ \A q \in FastQuorums : q \subseteq Replicas
-              /\ \A q, r \in FastQuorums : q \intersect r # {}
-              /\ \A q \in Quorums : \A r, s \in FastQuorums : q \intersect r \intersect s # {}
+FastAssume ==
+    /\ \A q \in FastQuorums : q \subseteq Replicas
+    /\ \A q, r \in FastQuorums : q \intersect r # {}
+    /\ \A q \in FastQuorums : (3 * Cardinality(Replicas)) \div 4 <= Cardinality(q)
+    /\ \A q \in Quorums : \A r, s \in FastQuorums : q \intersect r \intersect s # {}
 
 ASSUME PaxosAssume /\ FastAssume
 
@@ -26,13 +46,11 @@ IsMajorityValue(M, v) == Cardinality(M) \div 2 < Cardinality({m \in M : m.value 
 (*
     Phase 2a (Fast):
 
-    In a fast round, the coordinator can send an P2a "any"
-    message if no other values has been proposed before.
+    The coordinator starts a fast round by sending a P2a "Any" message, if no other values has been proposed before.
 *)
-FastAccept ==
+FastAny ==
     /\ UNCHANGED<<decision, maxBallot, maxVBallot, maxValue, cValue>>
     /\ \E f \in FastBallots :
-        /\ cValue = none
         /\ SendMessage([type |-> "P2a",
                         ballot |-> f,
                         value |-> any])
@@ -40,10 +58,9 @@ FastAccept ==
 (*
     Phase 2b (Fast):
 
-    Acceptors can reply to a P2a "any" message with a P2b message
-    containing their proposed value.
+    Acceptors can reply to a P2a "Any" message with a P2b message containing their proposed value.
 *)
-FastAccepted ==
+FastPropose ==
     /\ UNCHANGED<<decision, cValue>>
     /\ \E a \in Replicas, m \in p2aMessages, v \in Values:
         /\ m.value = any
@@ -58,7 +75,13 @@ FastAccepted ==
                         acceptor |-> a,
                         value |-> v])
 
-\* A value is chosen if a fast quorum of acceptors proposed that value in a fast round.
+(*
+    A value is chosen if a fast quorum of acceptors proposed that value in a fast round.
+
+    Because the quorum size of a fast round and classic round is different, we assume that the acceptor distinguishes
+    a fast round and classic round based on the P2a message it receives. If the P2a message contains the special value
+    "any", it is a fast round. Else it is a classic round.
+*)
 FastDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue, cValue>>
     /\ \E b \in FastBallots, q \in FastQuorums :
@@ -73,10 +96,9 @@ FastDecide ==
 
     If more than one value has been proposed, the collision is resolved using the following rules:
 
-    1. If the votes contain different values, a value must
-       be selected if the majority of acceptors in the quorum
-       have casted a vote for that value.
-       
+    1. If the proposals contain different values, a value must be selected if the majority of
+       acceptors in the fast quorum have casted a vote for that value.
+
     2. Otherwise, the coordinator is free to select any value.
 *)
 ClassicAccept ==
@@ -97,7 +119,18 @@ ClassicAccept ==
                               ballot |-> b,
                               value |-> v])
 
-\* Classic consensus.
+(*
+    Phase 2b (Classic)
+
+    Same as in Paxos.
+*)
+ClassicAccepted ==
+    /\ UNCHANGED<<cValue>>
+    /\ PaxosAccepted
+
+(*
+    Same as in Paxos.
+*)
 ClassicDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue, cValue>>
     /\ \E b \in ClassicBallots, q \in Quorums :
@@ -111,17 +144,17 @@ FastTypeOK == /\ PaxosTypeOK
 FastInit == /\ PaxosInit
             /\ cValue = none
 
-FastNext == \/ FastAccept
-            \/ FastAccepted
+FastNext == \/ FastAny
+            \/ FastPropose
             \/ FastDecide
             \/ ClassicAccept
-            \/ PaxosAccepted /\ UNCHANGED<<cValue>>
+            \/ ClassicAccepted
             \/ ClassicDecide
-            \/ PaxosSuccess /\ UNCHANGED<<cValue>>
 
 FastSpec == /\ FastInit
             /\ [][FastNext]_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>
-            /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(PaxosSuccess)
+            /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(FastDecide)
+            /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(ClassicDecide)
 
 \* Only proposed values can be learnt.
 FastNontriviality == \/ decision = none
@@ -131,5 +164,7 @@ FastSafetyProperty == /\ [][FastNontriviality]_<<messages, decision, maxBallot, 
                       /\ [][PaxosConsistency]_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>
 
 FastSymmetry == PaxosSymmetry
+
+THEOREM FastSpec => PaxosSpec
 
 ===============================================================

@@ -2,6 +2,4 @@
 *.out
 *.tex
 
-tla/states/
-tla/*.pdf
-tla/FastPaxos.toolbox/*
+TLA+/states/
