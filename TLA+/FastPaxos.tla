@@ -17,19 +17,11 @@
        is indistinguishable from its simply pausing. There is thus no need to model failures explicitly.
 *)
 
-EXTENDS TLC, Naturals, FiniteSets, Integers
+EXTENDS Paxos
 
-CONSTANTS any, none, Replicas, Values, Ballots, Quorums
 CONSTANTS FastQuorums, FastBallots
 
-VARIABLES messages \* Set of all messages sent.
-VARIABLES decision \* Decided value of an acceptor.
-VARIABLES maxBallot \* Maximum ballot an acceptor has seen.
-VARIABLES maxVBallot \* Maximum ballot an acceptor has accepted.
-VARIABLES maxValue \* Maximum value an acceptor has accepted.
 VARIABLES cValue \* Value chosen by coordinator.
-
-INSTANCE Paxos
 
 ClassicBallots == Ballots \ FastBallots \* The set of ballots of classic rounds.
 
@@ -129,7 +121,10 @@ ClassicAccepted ==
     /\ PaxosAccepted
 
 (*
-    Same as in Paxos.
+    Consensus is achieved when a majority of acceptors accept the same ballot number.
+
+    Functionally similar to PaxosDecide in Paxos.tla, but we also have to
+    ensure that it can only occur in classic rounds and not fast rounds.
 *)
 ClassicDecide ==
     /\ UNCHANGED<<messages, maxBallot, maxVBallot, maxValue, cValue>>
@@ -156,15 +151,8 @@ FastSpec == /\ FastInit
             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(FastDecide)
             /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>(ClassicDecide)
 
-\* Only proposed values can be learnt.
+\* Non-triviality safety property: Only proposed values can be learnt.
 FastNontriviality == \/ decision = none
                      \/ \E m \in p2bMessages : m.value = decision /\ m.ballot \in FastBallots
-
-FastSafetyProperty == /\ [][FastNontriviality]_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>
-                      /\ [][PaxosConsistency]_<<messages, decision, maxBallot, maxVBallot, maxValue, cValue>>
-
-FastSymmetry == PaxosSymmetry
-
-THEOREM FastSpec => PaxosSpec
 
 ===============================================================

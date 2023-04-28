@@ -190,19 +190,30 @@ PaxosSpec == /\ PaxosInit
              /\ [][PaxosNext]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
              /\ SF_<<messages, decision, maxBallot, maxVBallot, maxValue>>(PaxosDecide)
 
-\* Only proposed values can be learnt.
+\* Non-triviality safety property: Only proposed values can be learnt.
 PaxosNontriviality ==
     /\ \/ decision = none
        \/ \E m \in p2aMessages : m.value = decision
     /\ \A m \in p1bMessages : /\ m.maxValue \in Values \/ 0 = m.maxVBallot
                               /\ m.maxValue = none \/ 0 < m.maxVBallot
 
-\* At most 1 value can be learnt.
-PaxosConsistency == decision = none \/ decision = decision'
+\* Consistency safety property: At most 1 value can be learnt.
+PaxosConsistency == [][decision = none]_<<decision>>
 
-PaxosSafetyProperty == /\ [][PaxosNontriviality]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
-                       /\ [][PaxosConsistency]_<<messages, decision, maxBallot, maxVBallot, maxValue>>
+(*
+    From Wikipedia:
 
+    Note that Paxos is not guaranteed to terminate, and thus does not
+    have the liveness property. This is supported by the Fischer Lynch Paterson
+    impossibility result (FLP) which states that a consistency protocol can
+    only have two of safety, liveness, and fault tolerance.
+
+    As Paxos's point is to ensure fault tolerance and it guarantees safety, it
+    cannot also guarantee liveness. 
+*)
+PaxosLiveness == FALSE
+
+\* Define symmetry for faster computations.
 PaxosSymmetry == Permutations(Values) \union Permutations(Replicas)
 
 ===============================================================
