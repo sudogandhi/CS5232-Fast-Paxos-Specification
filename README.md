@@ -1,5 +1,7 @@
 # CS5232 Research Project: Specifying Fast Paxos in TLA+
 
+:confetti_ball: This TLA+ specification has been merged into the [Official TLA+ Examples Repository](https://github.com/tlaplus/Examples/tree/master/specifications/SimplifiedFastPaxos)! :confetti_ball:
+
 ## Software Prerequisites
 
 Please, make sure to install
