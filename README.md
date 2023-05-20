@@ -1,6 +1,10 @@
-# CS5232 Research Project: Specifying Fast Paxos in TLA+
+# NUS CS5232 Research Project: Specifying Fast Paxos in TLA+
 
 :confetti_ball: This TLA+ specification has been merged into the [Official TLA+ Examples Repository](https://github.com/tlaplus/Examples/tree/master/specifications/SimplifiedFastPaxos)! :confetti_ball:
+
+## About
+
+A simplified TLA+ specification of the Fast Paxos protocol by Leslie Lamport, a consensus algorithm for distributed systems. TLA+ is a high-level language for modeling programs and systems, especially concurrent and distributed ones, using simple mathematics.
 
 ## Software Prerequisites
 
